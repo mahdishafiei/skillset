@@ -135,6 +135,54 @@ def resolve_input(args, run_dir: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# amino-acid input -> nucleotide (abstar only accepts nucleotide)
+# ---------------------------------------------------------------------------
+def _is_protein(seq: str, thresh: float = 0.9) -> bool:
+    """True if the sequence looks like protein rather than nucleotide."""
+    s = "".join(seq.split()).upper().replace("-", "").replace(".", "").replace("*", "")
+    if len(s) < 3:
+        return False
+    ntc = sum(c in "ACGTUN" for c in s)
+    return (ntc / len(s)) < thresh  # <90% ACGTUN => amino acid
+
+
+def prepare_nucleotide_input(input_path: str, run_dir: str):
+    """abstar needs nucleotide. If the input holds amino-acid sequences, reverse-
+    translate them with dnachisel (randomized codons) so abstar can assign genes.
+    Returns (path_to_use, n_backtranslated)."""
+    import abutils
+
+    if os.path.isdir(input_path):
+        return input_path, 0  # directory batch: assume nucleotide reads
+    try:
+        fmt = abutils.io.determine_fastx_format(input_path)
+    except Exception:
+        fmt = "fasta"
+    if fmt == "fastq":
+        return input_path, 0  # sequencing reads are nucleotide
+
+    seqs = list(abutils.io.read_fasta(input_path))
+    if not seqs or not any(_is_protein(s.sequence) for s in seqs):
+        return input_path, 0
+
+    import dnachisel as dc  # published: DnaChisel reverse_translate
+
+    out_path = os.path.join(run_dir, "input_nt.fasta")
+    n = 0
+    with open(out_path, "w") as f:
+        for s in seqs:
+            seq = s.sequence
+            if _is_protein(seq):
+                aa = "".join(seq.upper().split()).replace("-", "").replace(".", "").replace("*", "")
+                nt = dc.reverse_translate(aa, randomize_codons=True)
+                n += 1
+            else:
+                nt = seq
+            f.write(f">{s.id}\n{nt}\n")
+    return out_path, n
+
+
+# ---------------------------------------------------------------------------
 # summarization
 # ---------------------------------------------------------------------------
 def load_airr(run_dir: str):
@@ -353,12 +401,21 @@ def write_report(summary, run_dir, meta, charts):
     lines = [f"# abstar annotation — {meta['name']}", ""]
     lines.append(f"- run: `{os.path.basename(run_dir)}`")
     lines.append(f"- receptor: **{meta['receptor']}**, germline database: **{meta['germline_database']}**")
+    lines.append(f"- input type: **{meta.get('input_type', 'nucleotide')}**")
     lines.append(f"- sequences annotated: **{summary['n_sequences']}**")
+    if summary.get("_backtranslated"):
+        lines.append(
+            f"- ⚠️ {summary['_backtranslated']} amino-acid sequence(s) were reverse-translated to "
+            "nucleotide (dnachisel, randomized codons). Gene calls, regions and CDR3 (aa) are valid; "
+            "**nucleotide-level SHM / mutation counts are not biologically meaningful** for these."
+        )
     if "pct_productive" in summary:
         lines.append(f"- productive: **{summary['n_productive']}/{summary['n_sequences']} ({summary['pct_productive']}%)**")
     if summary.get("loci"):
         lines.append("- loci: " + ", ".join(f"{k} ({v})" for k, v in summary["loci"].items()))
-    if "mean_v_shm_pct" in summary:
+    if summary.get("_all_backtranslated"):
+        lines.append("- mean V SHM: _n/a (amino-acid input; nt-level mutation not meaningful)_")
+    elif "mean_v_shm_pct" in summary:
         lines.append(f"- mean V SHM: **{summary['mean_v_shm_pct']}%** (germline identity {summary['mean_v_germline_identity_pct']}%)")
     if summary.get("cdr3_length"):
         c = summary["cdr3_length"]
@@ -430,6 +487,14 @@ def main():
 
     input_path = resolve_input(args, run_dir)
 
+    # abstar only accepts nucleotide; auto reverse-translate amino-acid input (dnachisel)
+    input_path, n_backtranslated = prepare_nucleotide_input(input_path, run_dir)
+    if n_backtranslated:
+        print(
+            f"note: {n_backtranslated} amino-acid sequence(s) detected -> reverse-translated to "
+            "nucleotide (dnachisel, randomized codons) before annotation."
+        )
+
     # run abstar -> writes airr/ + parquet/ into run_dir
     try:
         abstar.run(
@@ -465,7 +530,16 @@ def main():
     summary = compute_summary(df, run_dir)
     charts = [] if args.no_charts else make_charts(summary, df, os.path.join(run_dir, "charts"), top=args.top)
 
-    meta = {"name": base_name, "receptor": args.receptor, "germline_database": args.germline_database, "run_dir": run_dir}
+    meta = {
+        "name": base_name,
+        "receptor": args.receptor,
+        "germline_database": args.germline_database,
+        "run_dir": run_dir,
+        "input_type": "amino acid (reverse-translated to nucleotide)" if n_backtranslated else "nucleotide",
+    }
+    all_backtranslated = bool(n_backtranslated) and n_backtranslated == summary["n_sequences"]
+    summary["_backtranslated"] = n_backtranslated
+    summary["_all_backtranslated"] = all_backtranslated
     summary["_meta"] = meta
     summary["_charts"] = [os.path.relpath(c, run_dir) for c in charts]
     with open(os.path.join(run_dir, "summary.json"), "w") as f:
@@ -475,11 +549,18 @@ def main():
     # ---- human-readable stdout ----
     print("=" * 60)
     print(f"abstar: annotated {summary['n_sequences']} sequences  ({args.receptor}, {args.germline_database})")
+    if n_backtranslated:
+        print(
+            f"input: {n_backtranslated} amino-acid sequence(s) back-translated to nucleotide "
+            "(gene calls, regions & CDR3-aa are valid; nt-level SHM/mutations are NOT meaningful)"
+        )
     if "pct_productive" in summary:
         print(f"productive: {summary['n_productive']}/{summary['n_sequences']} ({summary['pct_productive']}%)")
     if summary.get("loci"):
         print("loci: " + ", ".join(f"{k}={v}" for k, v in summary["loci"].items()))
-    if "mean_v_shm_pct" in summary:
+    if all_backtranslated:
+        print("mean V SHM: n/a  (amino-acid input; nt-level mutation not meaningful)")
+    elif "mean_v_shm_pct" in summary:
         print(f"mean V SHM: {summary['mean_v_shm_pct']}%  (germline identity {summary['mean_v_germline_identity_pct']}%)")
     if summary.get("cdr3_length"):
         c = summary["cdr3_length"]

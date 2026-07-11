@@ -14,8 +14,14 @@ The model never guesses gene calls — it always runs abstar and presents the re
 
 ## Input
 
-Pasted sequence(s), a FASTA/FASTQ file, or a whole directory. Nucleotide sequences; BCR
-(antibodies, default) or TCR (`--receptor tcr`).
+Pasted sequence(s), a FASTA/FASTQ file, or a whole directory. BCR (antibodies, default) or
+TCR (`--receptor tcr`).
+
+**Nucleotide _or_ amino acid.** abstar itself only accepts nucleotide, so if you give it a
+protein sequence the skill auto-detects it and reverse-translates to nucleotide (via
+`dnachisel.reverse_translate`, reading with `abutils.io.read_fasta`) before annotating. Gene
+calls, regions, and CDR3 (aa) are valid for back-translated input; nucleotide-level SHM /
+mutations are not (the codons are invented) and are reported as `n/a`.
 
 ## Usage
 

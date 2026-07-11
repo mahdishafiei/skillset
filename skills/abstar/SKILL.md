@@ -43,6 +43,18 @@ inline** by Read-ing the PNGs in `<run_dir>/charts/`, and point the user to the 
 folder. For a single sequence, just give its locus, V/D/J/C call, CDR3 (aa), productivity,
 and SHM%.
 
+## Amino-acid input (automatic)
+
+abstar only accepts **nucleotide** sequences. If the input is **amino acid** (detected
+automatically), the wrapper reverse-translates it to nucleotide with
+[`dnachisel.reverse_translate(..., randomize_codons=True)`](https://github.com/Edinburgh-Genome-Foundry/DnaChisel)
+(reading via `abutils.io.read_fasta`) before running abstar — no action needed from you.
+Detection is per-sequence, so mixed aa/nt input works.
+
+When this happens, tell the user: **gene calls, regions, and CDR3 (aa) are valid, but
+nucleotide-level SHM / mutation counts are NOT meaningful** (the codons were invented by the
+back-translation). The script already prints this caveat and marks SHM as `n/a`.
+
 ## What gets saved (per run)
 
 A timestamped folder under `06_VS_code/abstar_runs/` containing:
