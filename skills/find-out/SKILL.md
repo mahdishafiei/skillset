@@ -43,7 +43,9 @@ Track, as you go: **references** (real, verifiable, with links/DOIs — never in
 
 ## Step 3 — Synthesize (rewrite it in your own words)
 
-Understand the material and re-explain it clearly and correctly; reconcile disagreements and flag open questions. For the PDF's visuals, **prefer actual figures from the source papers over anything you draw yourself**:
+Understand the material and re-explain it clearly and correctly; reconcile disagreements and flag open questions. For the PDF's visuals, **prefer actual figures from the source papers over anything you draw yourself**.
+
+**Be selective — essential figures only.** Include the *smallest set of figures that each unlock a distinct core idea* (e.g. the architecture; the single decisive result) — ideally **one figure per key concept**. Don't include a figure just because you found or downloaded it; skip redundant or dense multi-panel figures that overlap something you've already shown, and when two make the same point, keep the clearer one. A handful of high-signal figures (~4–6) beats a dozen.
 
 - **Embed real figures from the papers (first choice).** Download the images with `curl -L -A "Mozilla/5.0" -o fig.png "<direct-image-url>"`, confirm with `file fig.png`, and embed with an attributed caption: `![**Figure 2** (Author et al., 2025) — what it shows. Source: <url>](/abs/path/fig.png){width=90%}`. Get direct image URLs from arXiv HTML (`https://arxiv.org/html/<id>`), the PMC `/figure/Fn/` pages, the publisher, or Wikipedia; if a host blocks bots (bioRxiv often 403s), use the PMC mirror. Reproducing figures with attribution is fine for a personal study document.
 - **Generate a chart yourself only for quantitative benchmark numbers, or when no paper figure can be downloaded.** Keep it **simple and robust — bar charts and tables, not hand-drawn box-and-arrow schematics** (those misalign). Save as `.png` and embed the same way.
