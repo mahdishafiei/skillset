@@ -9,6 +9,7 @@ Each skill lives in [`skills/<name>/`](skills) as a single `SKILL.md` (plus a sh
 | Skill | Command | What it does |
 |-------|---------|--------------|
 | [**find-out**](skills/find-out) | `/find-out <subject>` | Runs an exhaustive, PhD-level literature review on any subject using parallel research agents, then produces a polished, cited **PDF**, a NotebookLM-style two-host **audio podcast** (MP3), and a transcript — all in one self-contained folder. |
+| [**abstar**](skills/abstar) | `/abstar` | Annotates antibody (BCR) or TCR sequences with the [brineylab **abstar**](https://github.com/brineylab/abstar) VDJ annotator — per-sequence V/D/J/C gene calls, CDR3, productivity, and SHM — plus a **gene-usage summary** and **charts**, saving the full AIRR/Parquet output to a run folder. |
 
 ## Install
 
@@ -40,6 +41,8 @@ Each skill lists its own prerequisites in its README. For **find-out** you'll ne
 | `ffmpeg` | stitching the audio | `brew install ffmpeg` |
 | `python3` + `matplotlib` | generating figures | `pip install matplotlib` |
 | `edge-tts` | neural TTS voices | `pip install edge-tts` |
+
+For **abstar** you'll need the [abstar](https://github.com/brineylab/abstar) annotator installed in a Python ≥3.10 virtualenv (`git clone` + `pip install -e .`); MMseqs2 comes bundled. The skill auto-detects the install or you can point it with `ABSTAR_HOME`. See [`skills/abstar/README.md`](skills/abstar/README.md).
 
 ## License
 
