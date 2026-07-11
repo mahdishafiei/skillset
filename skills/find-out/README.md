@@ -4,7 +4,7 @@
 
 `/find-out` takes a subject you name, spins up **parallel research agents** to comb the web and academic databases (PubMed, bioRxiv, arXiv, …), traces everything back to primary sources, and then produces three self-contained deliverables:
 
-1. **A polished, cited PDF** — TL;DR, background, the problem it solves, deep mechanics, applications, custom-generated figures, runnable code, honest limitations, and an annotated bibliography.
+1. **A polished, cited PDF** — TL;DR, background, the problem it solves, deep mechanics, applications, key **figures reproduced from the source papers**, honest limitations, and an annotated bibliography.
 2. **A NotebookLM-style audio overview** — two hosts (neural voices) having a natural ~6–12 minute conversation that teaches the topic.
 3. **A transcript** of the audio.
 

@@ -1,6 +1,6 @@
 ---
 name: find-out
-description: Run an exhaustive, PhD-level literature review and explainer on any scientific subject, term, method, tool, or paper the user names. Search the whole internet plus academic databases, then produce a polished PDF (background, deep applications, the problem it solves, key figures, references, working code) AND a NotebookLM-style two-host audio "podcast" overview. Use when the user runs /find-out or asks to "deeply research", "do a literature review on", "explain everything about", or "find out about" a topic.
+description: Run an exhaustive, PhD-level literature review and explainer on any scientific subject, term, method, tool, or paper the user names. Search the whole internet plus academic databases, then produce a polished PDF (background, deep applications, the problem it solves, figures reproduced from the source papers, and annotated references) AND a NotebookLM-style two-host audio "podcast" overview. Use when the user runs /find-out or asks to "deeply research", "do a literature review on", "explain everything about", or "find out about" a topic.
 ---
 
 # Find Out — Deep Literature Review & Explainer
@@ -39,22 +39,24 @@ Cast the widest possible net:
 - Give them **no length limit** — instruct each to be exhaustive, read full sources, and write as long a report as the material warrants.
 - Prefer **more agents over shallower ones** so each facet goes deep.
 
-Track, as you go: **references** (real, verifiable, with links/DOIs — never invent), **figures** (what each shows + source URL), **code** (canonical implementations, minimal examples), and **numbers** (the concrete facts, equations, parameters, results a PhD student must know).
+Track, as you go: **references** (real, verifiable, with links/DOIs — never invent), **figures** (for each key figure, capture its **direct downloadable image URL** — from arXiv HTML, the PMC article, the publisher, or Wikipedia — plus figure number and a one-line caption, so it can be embedded), and **numbers** (the concrete facts, equations, parameters, results a PhD student must know).
 
 ## Step 3 — Synthesize (rewrite it in your own words)
 
-Understand the material and re-explain it clearly and correctly; reconcile disagreements and flag open questions. Because the deliverable is a **PDF**, make visuals that render in a PDF:
+Understand the material and re-explain it clearly and correctly; reconcile disagreements and flag open questions. For the PDF's visuals, **prefer actual figures from the source papers over anything you draw yourself**:
 
-- **Generate real figures** with a short Python/matplotlib script, save them as `.png`, and embed them with `![caption](/abs/path/to/fig.png)`.
-- Use **Markdown tables** for structured comparisons.
-- Math renders via LaTeX — use `$...$` / `$$...$$` freely. (Pandoc gotcha: a closing `$` must **not** be immediately followed by a digit, e.g. write `$\leq 8$B`, not `$\leq$8B`.)
-- Avoid Mermaid diagrams — they don't render in the PDF. Use a generated image, a table, or an ASCII schematic.
+- **Embed real figures from the papers (first choice).** Download the images with `curl -L -A "Mozilla/5.0" -o fig.png "<direct-image-url>"`, confirm with `file fig.png`, and embed with an attributed caption: `![**Figure 2** (Author et al., 2025) — what it shows. Source: <url>](/abs/path/fig.png){width=90%}`. Get direct image URLs from arXiv HTML (`https://arxiv.org/html/<id>`), the PMC `/figure/Fn/` pages, the publisher, or Wikipedia; if a host blocks bots (bioRxiv often 403s), use the PMC mirror. Reproducing figures with attribution is fine for a personal study document.
+- **Generate a chart yourself only for quantitative benchmark numbers, or when no paper figure can be downloaded.** Keep it **simple and robust — bar charts and tables, not hand-drawn box-and-arrow schematics** (those misalign). Save as `.png` and embed the same way.
+- Use **Markdown tables** for structured comparisons and **LaTeX math** (`$...$` / `$$...$$`) for equations. (Pandoc gotcha: a closing `$` must **not** be immediately followed by a digit, e.g. write `$\leq 8$B`, not `$\leq$8B`.) No Mermaid — it won't render in the PDF.
+- Verify every figure file exists and is a valid image before referencing it, with a clear sourced caption.
 
 ## Step 4 — Write the document
 
 One Markdown document, roughly (adapt to the subject — you own the final shape):
 
-1. **Title** · 2. **TL;DR** (3–6 sentences) · 3. **Background & Introduction** (origin, foundations, prerequisites, history) · 4. **The problem it solves** · 5. **How it works / Core concepts** (the deep heart — theory, math, mechanism, step by step) · 6. **Applications & use in practice** · 7. **Key figures** (embedded) · 8. **Code / hands-on** (runnable, minimal, commented) · 9. **Limitations, debates & open questions** · 10. **Annotated references** (seminal work first, each with why it matters + working link) · 11. **Further reading / learning path**.
+1. **Title** · 2. **TL;DR** (3–6 sentences) · 3. **Background & Introduction** (origin, foundations, prerequisites, history) · 4. **The problem it solves** · 5. **How it works / Core concepts** (the deep heart — theory, math, mechanism, step by step) · 6. **Applications & use in practice** · 7. **Key figures** (reproduced from the source papers and embedded, each with a sourced caption; a self-made chart only for benchmark numbers or when no paper figure exists) · 8. **Limitations, debates & open questions** · 9. **Annotated references** (seminal work first, each with why it matters + working link) · 10. **Further reading / learning path**.
+
+No dedicated code section — the user isn't interested in implementation code (a short inline command is fine only if essential).
 
 Write at PhD-student level: rigorous and precise, but explain every non-obvious step; define jargon.
 
