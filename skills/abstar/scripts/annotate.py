@@ -397,6 +397,93 @@ def make_charts(summary, df, charts_dir, top=20):
 # ---------------------------------------------------------------------------
 # report
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# alternative numbering (Kabat / Chothia / IMGT / AHo / Martin) via ANARCI+abnumber
+# ---------------------------------------------------------------------------
+def _ensure_hmmer_on_path():
+    import shutil
+
+    if shutil.which("hmmscan"):
+        return
+    for d in ("/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "/usr/bin"):
+        if os.path.exists(os.path.join(d, "hmmscan")):
+            os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
+            return
+
+
+def compute_numbering(df, run_dir, scheme):
+    """Renumber each antibody variable domain in `scheme` (kabat, chothia, imgt, aho,
+    martin) using ANARCI via abnumber. Writes numbering_<scheme>.csv (per-sequence
+    FR/CDR seqs + lengths) and numbering_<scheme>_positions.tsv (per-residue labels
+    like H100A). Returns a small summary dict."""
+    _ensure_hmmer_on_path()
+    import polars as pl
+
+    try:
+        from abnumber import Chain
+    except Exception as e:  # anarci/abnumber not installed
+        return {"scheme": scheme, "error": f"abnumber/anarci not available: {e}"}
+
+    if "sequence_aa" not in df.columns:
+        return {"scheme": scheme, "error": "no sequence_aa column in abstar output"}
+
+    cols = ["fr1", "cdr1", "fr2", "cdr2", "fr3", "cdr3", "fr4",
+            "cdr1_len", "cdr2_len", "cdr3_len"]
+    rows, pos_rows = [], []
+    n_ok = n_fail = 0
+    for r in df.select(["sequence_id", "sequence_aa"]).iter_rows(named=True):
+        sid, aa = r["sequence_id"], r["sequence_aa"]
+        row = {"sequence_id": sid, "numbered": False, "chain_type": None}
+        row.update({c: None for c in cols})
+        if not aa:
+            n_fail += 1
+            rows.append(row)
+            continue
+        try:
+            c = Chain(str(aa), scheme=scheme)
+        except Exception:
+            n_fail += 1
+            rows.append(row)
+            continue
+        n_ok += 1
+        row.update({
+            "numbered": True, "chain_type": c.chain_type,
+            "fr1": c.fr1_seq, "cdr1": c.cdr1_seq, "fr2": c.fr2_seq, "cdr2": c.cdr2_seq,
+            "fr3": c.fr3_seq, "cdr3": c.cdr3_seq, "fr4": c.fr4_seq,
+            "cdr1_len": len(c.cdr1_seq), "cdr2_len": len(c.cdr2_seq), "cdr3_len": len(c.cdr3_seq),
+        })
+        rows.append(row)
+        for pos, resi in c:
+            pos_rows.append({"sequence_id": sid, "position": str(pos),
+                             "residue": resi, "region": pos.get_region()})
+
+    if rows:
+        pl.DataFrame(rows).write_csv(os.path.join(run_dir, f"numbering_{scheme}.csv"))
+    if pos_rows:
+        pl.DataFrame(pos_rows).write_csv(
+            os.path.join(run_dir, f"numbering_{scheme}_positions.tsv"), separator="\t"
+        )
+
+    ok = [r for r in rows if r["numbered"]]
+    out = {"scheme": scheme, "n_numbered": n_ok, "n_failed": n_fail}
+    if ok:
+        c3 = [r["cdr3_len"] for r in ok]
+        out["cdr_len_summary"] = {
+            "cdr1_mean": round(sum(r["cdr1_len"] for r in ok) / len(ok), 1),
+            "cdr2_mean": round(sum(r["cdr2_len"] for r in ok) / len(ok), 1),
+            "cdr3_mean": round(sum(c3) / len(c3), 1),
+            "cdr3_range": [min(c3), max(c3)],
+        }
+        if len(ok) == 1:
+            e = ok[0]
+            out["example"] = {"chain_type": e["chain_type"], "cdr1": e["cdr1"],
+                              "cdr2": e["cdr2"], "cdr3": e["cdr3"]}
+    return out
+
+
+# ---------------------------------------------------------------------------
+# report
+# ---------------------------------------------------------------------------
 def write_report(summary, run_dir, meta, charts):
     lines = [f"# abstar annotation — {meta['name']}", ""]
     lines.append(f"- run: `{os.path.basename(run_dir)}`")
@@ -438,6 +525,24 @@ def write_report(summary, run_dir, meta, charts):
     if summary.get("isotype_usage"):
         table("Isotypes", summary["isotype_usage"])
 
+    nb = summary.get("_numbering")
+    if nb and not nb.get("error"):
+        s = nb["scheme"]
+        lines.append(f"## {s.capitalize()} numbering (ANARCI/abnumber)")
+        lines.append("")
+        lines.append(f"Renumbered {nb['n_numbered']}/{nb['n_numbered'] + nb['n_failed']} sequences in the **{s}** scheme.")
+        if nb.get("example"):
+            e = nb["example"]
+            lines.append("")
+            lines.append(f"- chain: **{e['chain_type']}**")
+            lines.append(f"- {s} CDR1: `{e['cdr1']}`")
+            lines.append(f"- {s} CDR2: `{e['cdr2']}`")
+            lines.append(f"- {s} CDR3: `{e['cdr3']}`")
+        elif nb.get("cdr_len_summary"):
+            cs = nb["cdr_len_summary"]
+            lines.append(f"- mean CDR lengths: CDR1 {cs['cdr1_mean']}, CDR2 {cs['cdr2_mean']}, CDR3 {cs['cdr3_mean']} (range {cs['cdr3_range'][0]}–{cs['cdr3_range'][1]})")
+        lines.append("")
+
     if charts:
         lines.append("## Charts")
         lines.append("")
@@ -452,6 +557,10 @@ def write_report(summary, run_dir, meta, charts):
     lines.append("- `gene_usage.csv` — machine-readable usage table")
     lines.append("- `summary.json` — full summary")
     lines.append("- `charts/` — PNG charts")
+    if nb and not nb.get("error"):
+        s = nb["scheme"]
+        lines.append(f"- `numbering_{s}.csv` — per-sequence {s} FR/CDR sequences & lengths")
+        lines.append(f"- `numbering_{s}_positions.tsv` — per-residue {s} position labels (e.g. H100A)")
 
     with open(os.path.join(run_dir, "report.md"), "w") as f:
         f.write("\n".join(lines) + "\n")
@@ -470,6 +579,12 @@ def main():
     ap.add_argument("--outdir", default=_default_results_dir())
     ap.add_argument("--top", type=int, default=20, help="top N genes to chart")
     ap.add_argument("--no-charts", action="store_true")
+    ap.add_argument(
+        "--numbering",
+        default="none",
+        choices=["none", "kabat", "imgt", "chothia", "aho", "martin"],
+        help="also renumber each antibody with this scheme (ANARCI via abnumber)",
+    )
     args = ap.parse_args()
 
     patched = ensure_abutils_patch()
@@ -510,7 +625,14 @@ def main():
     except Exception as e:  # abstar's sequential assigner raises on unassignable input
         msg = str(e)
         print("abstar could not annotate the input.")
-        if "no entry" in msg or "MMseqs" in msg or "mmseqs" in msg:
+        if "datatypes of join keys" in msg or ("v_query" in msg and "d_query" in msg):
+            print(
+                "This is a known abstar type-inference issue that hits small batches (~2-9 "
+                "sequences) whose IDs look numeric (e.g. '10E8' parses as a float). Workarounds: "
+                "annotate a single sequence, use >=10 sequences, or give the sequences "
+                "non-numeric IDs (e.g. prefix each header with a letter)."
+            )
+        elif "no entry" in msg or "MMseqs" in msg or "mmseqs" in msg:
             print(
                 "Likely cause: the sequence(s) are partial (e.g. a V-only fragment with no J "
                 "region), too short, or not antibody/TCR reads. abstar needs enough of the "
@@ -529,6 +651,12 @@ def main():
 
     summary = compute_summary(df, run_dir)
     charts = [] if args.no_charts else make_charts(summary, df, os.path.join(run_dir, "charts"), top=args.top)
+
+    numbering = None
+    if args.numbering != "none":
+        print(f"computing {args.numbering} numbering (ANARCI/abnumber)...")
+        numbering = compute_numbering(df, run_dir, args.numbering)
+        summary["_numbering"] = numbering
 
     meta = {
         "name": base_name,
@@ -571,6 +699,19 @@ def main():
         print("top J genes: " + ", ".join(f"{v} {p}%" for v, _, p in summary["j_gene_usage"][:5]))
     if summary.get("isotype_usage"):
         print("isotypes: " + ", ".join(f"{v} {p}%" for v, _, p in summary["isotype_usage"][:6]))
+    if numbering and not numbering.get("error"):
+        s = numbering["scheme"]
+        total = numbering["n_numbered"] + numbering["n_failed"]
+        print(f"{s} numbering: {numbering['n_numbered']}/{total} numbered (ANARCI/abnumber)")
+        if numbering.get("example"):
+            e = numbering["example"]
+            print(f"  {s} CDRs [{e['chain_type']}]: CDR1={e['cdr1']}  CDR2={e['cdr2']}  CDR3={e['cdr3']}")
+        elif numbering.get("cdr_len_summary"):
+            cs = numbering["cdr_len_summary"]
+            print(f"  {s} CDR3 length: mean {cs['cdr3_mean']}, range {cs['cdr3_range'][0]}-{cs['cdr3_range'][1]}")
+        print(f"  files: numbering_{s}.csv, numbering_{s}_positions.tsv")
+    elif numbering and numbering.get("error"):
+        print(f"numbering ({numbering['scheme']}) unavailable: {numbering['error']}")
     if patched:
         print("(note: re-applied abutils spaces-in-path patch)")
     print(f"saved to: {run_dir}")

@@ -35,8 +35,17 @@ annotator:
 ```bash
 bash ~/.claude/skills/abstar/scripts/run.sh --input <fasta-or-folder> --name <name> \
      [--receptor bcr|tcr] [--germline-database human|macaque|balbc|c57bl6|human+c57bl6] \
-     [--top 20] [--no-charts]
+     [--numbering kabat|chothia|imgt|aho|martin] [--top 20] [--no-charts]
 ```
+
+### Numbering scheme
+
+abstar annotates with **IMGT** numbering/regions. Pass `--numbering kabat` (or `chothia`,
+`aho`, `martin`, `imgt`) to *additionally* renumber each antibody with **ANARCI** (via
+[`abnumber`](https://github.com/prihoda/abnumber)) and save per-scheme CDR/FR sequences
+(`numbering_<scheme>.csv`) plus per-residue position labels like `H100A`
+(`numbering_<scheme>_positions.tsv`). CDR boundaries differ by scheme (e.g. Kabat CDR3 is
+shorter than IMGT CDR3). Needs `anarci` + `abnumber` + HMMER (`hmmscan`).
 
 ## Requirements
 
@@ -44,6 +53,7 @@ bash ~/.claude/skills/abstar/scripts/run.sh --input <fasta-or-folder> --name <na
 |---|---|
 | **abstar** installed in a `.venv` | `git clone git@github.com:brineylab/abstar.git`, then a Python ≥3.10 venv with `pip install -e .`. MMseqs2 is bundled via `abutils`; `parasail` may need `autoconf`/`automake`/`libtool` to build. |
 | Python libs (in that venv) | abstar pulls `abutils`, `polars`, `parasail`, `matplotlib`, etc. |
+| For `--numbering` only | `pip install anarci abnumber` + HMMER (`hmmscan`, e.g. `brew install hmmer`) |
 
 The launcher auto-detects abstar at `~/abstar`, `~/code/abstar`, `~/src/abstar`, or a Google
 Drive `…/06_VS_code/abstar`. If it lives elsewhere, set `ABSTAR_HOME=/path/to/abstar`.

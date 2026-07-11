@@ -55,6 +55,22 @@ When this happens, tell the user: **gene calls, regions, and CDR3 (aa) are valid
 nucleotide-level SHM / mutation counts are NOT meaningful** (the codons were invented by the
 back-translation). The script already prints this caveat and marks SHM as `n/a`.
 
+## Numbering scheme (IMGT default; Kabat/Chothia/… optional)
+
+abstar's own regions and CDRs are **IMGT**-delimited. If the user wants **Kabat** (or
+Chothia/Martin/AHo) numbering, add `--numbering kabat` (choices: `kabat`, `chothia`, `imgt`,
+`aho`, `martin`). This renumbers each antibody's variable domain with **ANARCI** (via
+`abnumber`) and additionally saves:
+
+- `numbering_<scheme>.csv` — per-sequence FR/CDR sequences and lengths in that scheme
+- `numbering_<scheme>_positions.tsv` — per-residue position labels (e.g. `H100A`)
+
+The script prints the scheme's CDRs (single sequence) or CDR-length summary (many). Note the
+CDR boundaries differ by scheme — e.g. IMGT CDR3 `AR...FQD` (len 22) vs Kabat CDR3 `...FQD`
+(len 20) for the same antibody. Requires `anarci` + `abnumber` + HMMER (already installed
+here; the script auto-finds `hmmscan`). It runs `hmmscan` per sequence, so it's opt-in and
+adds time on large inputs.
+
 ## What gets saved (per run)
 
 A timestamped folder under `06_VS_code/abstar_runs/` containing:
