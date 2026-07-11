@@ -309,6 +309,52 @@ def compute_summary(df, run_dir):
 
 
 # ---------------------------------------------------------------------------
+# region map: FR/CDR (IMGT, from abstar) + constant (CH/CL) with residue ranges
+# ---------------------------------------------------------------------------
+_REGION_ORDER = [
+    ("FR1", "fwr1_aa"), ("CDR1", "cdr1_aa"), ("FR2", "fwr2_aa"), ("CDR2", "cdr2_aa"),
+    ("FR3", "fwr3_aa"), ("CDR3", "cdr3_aa"), ("FR4", "fwr4_aa"),
+]
+
+
+def build_region_maps(df, run_dir):
+    """Per-sequence residue map: FR1-4 and CDR1-3 (IMGT, straight from abstar) plus the
+    constant region (CH for heavy / CL for light, labelled by isotype/c_call), each with a
+    1-based residue range along the protein. Writes region_map.csv. Returns the single
+    sequence's map when there is exactly one input."""
+    import polars as pl
+
+    need = [c for _, c in _REGION_ORDER] + ["c_sequence_aa", "c_call", "sequence_id"]
+    sub = df.select([c for c in need if c in df.columns])
+    out_rows, single = [], None
+    for row in sub.iter_rows(named=True):
+        sid = row.get("sequence_id")
+        pos, rmap = 0, []
+        for label, col in _REGION_ORDER:  # V-domain regions tile sequence_aa in order
+            seq = row.get(col)
+            if seq:
+                rmap.append({"sequence_id": sid, "region": label, "kind": "V-domain (IMGT)",
+                             "aa_start": pos + 1, "aa_end": pos + len(seq),
+                             "length": len(seq), "sequence": seq})
+                pos += len(seq)
+        c = row.get("c_sequence_aa")  # constant region translated separately by abstar
+        if c:
+            cc = row.get("c_call") or "constant"
+            kind = "constant (CH)" if str(cc).startswith("IGH") else "constant (CL)"
+            rmap.append({"sequence_id": sid, "region": f"C:{cc}", "kind": kind,
+                         "aa_start": pos + 1, "aa_end": pos + len(c),
+                         "length": len(c), "sequence": c})
+            pos += len(c)
+        if rmap:
+            out_rows.extend(rmap)
+            if single is None:
+                single = rmap
+    if out_rows:
+        pl.DataFrame(out_rows).write_csv(os.path.join(run_dir, "region_map.csv"))
+    return single if df.height == 1 else None
+
+
+# ---------------------------------------------------------------------------
 # charts
 # ---------------------------------------------------------------------------
 def _style():
@@ -525,6 +571,18 @@ def write_report(summary, run_dir, meta, charts):
     if summary.get("isotype_usage"):
         table("Isotypes", summary["isotype_usage"])
 
+    rmap = summary.get("_region_map")
+    if rmap:
+        lines.append("## Region map (IMGT regions from abstar)")
+        lines.append("")
+        lines.append("Residue numbers are 1-based along the protein (FR1 = residue 1); the constant region continues after FR4.")
+        lines.append("")
+        lines.append("| region | residues (aa) | length | sequence |")
+        lines.append("|---|---|---:|---|")
+        for r in rmap:
+            lines.append(f"| {r['region']} ({r['kind']}) | {r['aa_start']}–{r['aa_end']} | {r['length']} | `{r['sequence']}` |")
+        lines.append("")
+
     nb = summary.get("_numbering")
     if nb and not nb.get("error"):
         s = nb["scheme"]
@@ -555,6 +613,7 @@ def write_report(summary, run_dir, meta, charts):
     lines.append("- `airr/` — AIRR-format TSV (all 147 fields)")
     lines.append("- `parquet/` — Parquet output")
     lines.append("- `gene_usage.csv` — machine-readable usage table")
+    lines.append("- `region_map.csv` — per-sequence FR/CDR + constant residue ranges (IMGT)")
     lines.append("- `summary.json` — full summary")
     lines.append("- `charts/` — PNG charts")
     if nb and not nb.get("error"):
@@ -650,6 +709,8 @@ def main():
         sys.exit(0)
 
     summary = compute_summary(df, run_dir)
+    region_map = build_region_maps(df, run_dir)  # None unless single sequence
+    summary["_region_map"] = region_map
     charts = [] if args.no_charts else make_charts(summary, df, os.path.join(run_dir, "charts"), top=args.top)
 
     numbering = None
@@ -699,6 +760,10 @@ def main():
         print("top J genes: " + ", ".join(f"{v} {p}%" for v, _, p in summary["j_gene_usage"][:5]))
     if summary.get("isotype_usage"):
         print("isotypes: " + ", ".join(f"{v} {p}%" for v, _, p in summary["isotype_usage"][:6]))
+    if region_map:
+        print("region map (IMGT regions from abstar; residue # along the protein):")
+        for r in region_map:
+            print(f"  {r['region']:<11} {r['aa_start']:>3}-{r['aa_end']:<4} {r['kind']:<16} {r['sequence']}")
     if numbering and not numbering.get("error"):
         s = numbering["scheme"]
         total = numbering["n_numbered"] + numbering["n_failed"]

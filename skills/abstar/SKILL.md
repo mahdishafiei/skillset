@@ -55,6 +55,17 @@ When this happens, tell the user: **gene calls, regions, and CDR3 (aa) are valid
 nucleotide-level SHM / mutation counts are NOT meaningful** (the codons were invented by the
 back-translation). The script already prints this caveat and marks SHM as `n/a`.
 
+## Region map (FR/CDR + constant, with residue numbers)
+
+Every run builds a **region map** straight from abstar: FR1–FR4 and CDR1–CDR3 (IMGT) plus
+the **constant region** (CH for heavy / CL for light, labelled by isotype from `c_call`),
+each with its **1-based residue range** along the protein (FR1 = residue 1; the constant
+region continues after FR4). For a single sequence, show this map to the user (e.g. "FR1:
+residues 1–25 …, CDR3: 97–107 …, constant IGHG1: 119–178 …"); it's saved as `region_map.csv`
+for every run. The constant region is whatever abstar's C-assignment captured (typically the
+start of CH1) — do **not** invent CH1/hinge/CH2/CH3 sub-boundaries or EU numbers; abstar
+doesn't provide them.
+
 ## Numbering scheme (IMGT default; Kabat/Chothia/… optional)
 
 abstar's own regions and CDRs are **IMGT**-delimited. If the user wants **Kabat** (or
@@ -74,8 +85,10 @@ adds time on large inputs.
 ## What gets saved (per run)
 
 A timestamped folder under `06_VS_code/abstar_runs/` containing:
-`airr/*.tsv` (all 147 fields), `parquet/*.parquet`, `gene_usage.csv`, `summary.json`,
-`report.md`, and `charts/` (V-gene usage, J-gene usage, isotype/locus, CDR3-length).
+`airr/*.tsv` (all 147 fields), `parquet/*.parquet`, `gene_usage.csv`, `region_map.csv`
+(FR/CDR + constant residue ranges), `summary.json`, `report.md`, and `charts/` (V-gene usage,
+J-gene usage, isotype/locus, CDR3-length). With `--numbering`, also `numbering_<scheme>.csv`
+and `numbering_<scheme>_positions.tsv`.
 
 ## Building on top of it
 

@@ -6,9 +6,12 @@
 [**abstar**](https://github.com/brineylab/abstar) VDJ annotator on your sequences and returns:
 
 - **Per-sequence annotation** — locus, V/D/J/C gene calls, CDR3 (aa), productivity, and SHM%.
+- **Region map** — FR1–FR4, CDR1–CDR3 (IMGT) and the constant (CH/CL) region, each with its
+  residue range (e.g. "FR1: 1–25 … constant IGHG1: 119–178").
 - **Gene-usage summary** — V/J gene frequencies, CDR3-length distribution, isotype breakdown.
 - **Publication-quality charts** and the **full AIRR TSV + Parquet** (all 147 fields), saved
   to a timestamped run folder.
+- Optional **Kabat/Chothia/AHo/Martin numbering** via `--numbering` (ANARCI).
 
 The model never guesses gene calls — it always runs abstar and presents the result.
 
@@ -67,9 +70,11 @@ Drive `…/06_VS_code/abstar`. If it lives elsewhere, set `ABSTAR_HOME=/path/to/
 
 ## Output (per run)
 
-`airr/*.tsv`, `parquet/*.parquet`, `gene_usage.csv`, `summary.json`, `report.md`, and
-`charts/` (V-gene usage, J-gene usage, isotype/locus, CDR3-length). See
-[`references/output_fields.md`](references/output_fields.md) for the full field list.
+`airr/*.tsv`, `parquet/*.parquet`, `gene_usage.csv`, `region_map.csv` (FR/CDR + constant
+residue ranges), `summary.json`, `report.md`, and `charts/` (V-gene usage, J-gene usage,
+isotype/locus, CDR3-length); plus `numbering_<scheme>.{csv,_positions.tsv}` when
+`--numbering` is used. See [`references/output_fields.md`](references/output_fields.md) for
+the full field list.
 
 ## Notes
 
