@@ -66,21 +66,20 @@ for every run. The constant region is whatever abstar's C-assignment captured (t
 start of CH1) — do **not** invent CH1/hinge/CH2/CH3 sub-boundaries or EU numbers; abstar
 doesn't provide them.
 
-## Numbering scheme (IMGT default; Kabat/Chothia/… optional)
+## Numbering scheme — Kabat by default (also Chothia/IMGT/AHo/Martin)
 
-abstar's own regions and CDRs are **IMGT**-delimited. If the user wants **Kabat** (or
-Chothia/Martin/AHo) numbering, add `--numbering kabat` (choices: `kabat`, `chothia`, `imgt`,
-`aho`, `martin`). This renumbers each antibody's variable domain with **ANARCI** (via
-`abnumber`) and additionally saves:
+By **default** the skill renumbers each antibody in **Kabat** (via **ANARCI** / `abnumber`) on
+top of abstar's IMGT regions — no flag needed. Switch scheme with
+`--numbering {kabat,chothia,imgt,aho,martin}` or turn it off with `--numbering none`. It saves:
 
 - `numbering_<scheme>.csv` — per-sequence FR/CDR sequences and lengths in that scheme
 - `numbering_<scheme>_positions.tsv` — per-residue position labels (e.g. `H100A`)
 
-The script prints the scheme's CDRs (single sequence) or CDR-length summary (many). Note the
-CDR boundaries differ by scheme — e.g. IMGT CDR3 `AR...FQD` (len 22) vs Kabat CDR3 `...FQD`
-(len 20) for the same antibody. Requires `anarci` + `abnumber` + HMMER (already installed
-here; the script auto-finds `hmmscan`). It runs `hmmscan` per sequence, so it's opt-in and
-adds time on large inputs.
+The script prints the scheme's CDRs (single sequence) or CDR-length summary (many). CDR
+boundaries differ by scheme — e.g. IMGT CDR3 `AR...FQD` (len 22) vs Kabat CDR3 `...FQD`
+(len 20) for the same antibody. Requires `anarci` + `abnumber` + HMMER (installed here; the
+script auto-finds `hmmscan`). It runs `hmmscan` per sequence, so it's auto-skipped above
+`--numbering-cap` (default 1000 sequences) to keep large runs fast.
 
 ## What gets saved (per run)
 

@@ -11,7 +11,8 @@
 - **Gene-usage summary** — V/J gene frequencies, CDR3-length distribution, isotype breakdown.
 - **Publication-quality charts** and the **full AIRR TSV + Parquet** (all 147 fields), saved
   to a timestamped run folder.
-- Optional **Kabat/Chothia/AHo/Martin numbering** via `--numbering` (ANARCI).
+- **Kabat numbering by default** (ANARCI) — switch with `--numbering chothia|imgt|aho|martin`
+  or turn off with `--numbering none`.
 
 The model never guesses gene calls — it always runs abstar and presents the result.
 
@@ -43,12 +44,13 @@ bash ~/.claude/skills/abstar/scripts/run.sh --input <fasta-or-folder> --name <na
 
 ### Numbering scheme
 
-abstar annotates with **IMGT** numbering/regions. Pass `--numbering kabat` (or `chothia`,
-`aho`, `martin`, `imgt`) to *additionally* renumber each antibody with **ANARCI** (via
-[`abnumber`](https://github.com/prihoda/abnumber)) and save per-scheme CDR/FR sequences
-(`numbering_<scheme>.csv`) plus per-residue position labels like `H100A`
-(`numbering_<scheme>_positions.tsv`). CDR boundaries differ by scheme (e.g. Kabat CDR3 is
-shorter than IMGT CDR3). Needs `anarci` + `abnumber` + HMMER (`hmmscan`).
+abstar annotates with **IMGT** regions. **By default** the skill *additionally* renumbers each
+antibody in **Kabat** with **ANARCI** (via [`abnumber`](https://github.com/prihoda/abnumber)),
+saving per-scheme CDR/FR sequences (`numbering_<scheme>.csv`) plus per-residue position labels
+like `H100A` (`numbering_<scheme>_positions.tsv`). Switch with `--numbering chothia|imgt|aho|
+martin` or disable with `--numbering none`. CDR boundaries differ by scheme (e.g. Kabat CDR3 is
+shorter than IMGT CDR3). Needs `anarci` + `abnumber` + HMMER (`hmmscan`); auto-skipped above
+`--numbering-cap` (default 1000 sequences).
 
 ## Requirements
 

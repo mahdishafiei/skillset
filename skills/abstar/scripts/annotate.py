@@ -640,9 +640,17 @@ def main():
     ap.add_argument("--no-charts", action="store_true")
     ap.add_argument(
         "--numbering",
-        default="none",
+        default="kabat",
         choices=["none", "kabat", "imgt", "chothia", "aho", "martin"],
-        help="also renumber each antibody with this scheme (ANARCI via abnumber)",
+        help="renumber each antibody with this scheme (ANARCI via abnumber); "
+             "default 'kabat', use 'none' to skip",
+    )
+    ap.add_argument(
+        "--numbering-cap",
+        type=int,
+        default=1000,
+        dest="numbering_cap",
+        help="skip numbering above this many sequences (per-sequence ANARCI is slow)",
     )
     args = ap.parse_args()
 
@@ -715,9 +723,16 @@ def main():
 
     numbering = None
     if args.numbering != "none":
-        print(f"computing {args.numbering} numbering (ANARCI/abnumber)...")
-        numbering = compute_numbering(df, run_dir, args.numbering)
-        summary["_numbering"] = numbering
+        if df.height > args.numbering_cap:
+            print(
+                f"{args.numbering} numbering skipped: {df.height} sequences exceeds the "
+                f"--numbering-cap of {args.numbering_cap} (per-sequence ANARCI is slow). "
+                f"Run a smaller batch, or raise --numbering-cap, to include it."
+            )
+        else:
+            print(f"computing {args.numbering} numbering (ANARCI/abnumber)...")
+            numbering = compute_numbering(df, run_dir, args.numbering)
+            summary["_numbering"] = numbering
 
     meta = {
         "name": base_name,
