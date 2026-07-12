@@ -57,29 +57,41 @@ back-translation). The script already prints this caveat and marks SHM as `n/a`.
 
 ## Region map (FR/CDR + constant, with residue numbers)
 
-Every run builds a **region map** straight from abstar: FR1–FR4 and CDR1–CDR3 (IMGT) plus
-the **constant region** (CH for heavy / CL for light, labelled by isotype from `c_call`),
-each with its **1-based residue range** along the protein (FR1 = residue 1; the constant
-region continues after FR4). For a single sequence, show this map to the user (e.g. "FR1:
-residues 1–25 …, CDR3: 97–107 …, constant IGHG1: 119–178 …"); it's saved as `region_map.csv`
-for every run. The constant region is whatever abstar's C-assignment captured (typically the
+Every run builds an **IMGT region map** straight from abstar: FR1–FR4 and CDR1–CDR3 (IMGT)
+plus the **constant region** (CH for heavy / CL for light, labelled by isotype from `c_call`),
+each with its **1-based residue range** along the protein (FR1 = residue 1; the constant region
+continues after FR4). It's always saved as `region_map.csv` (the abstar-native, IMGT reference).
+With the default **Kabat** numbering active, the region map you *show the user* is the Kabat one
+(see the Numbering section below); only when `--numbering none` do you show this IMGT map. The constant region is whatever abstar's C-assignment captured (typically the
 start of CH1) — do **not** invent CH1/hinge/CH2/CH3 sub-boundaries or EU numbers; abstar
 doesn't provide them.
 
 ## Numbering scheme — Kabat by default (also Chothia/IMGT/AHo/Martin)
 
-By **default** the skill renumbers each antibody in **Kabat** (via **ANARCI** / `abnumber`) on
-top of abstar's IMGT regions — no flag needed. Switch scheme with
-`--numbering {kabat,chothia,imgt,aho,martin}` or turn it off with `--numbering none`. It saves:
+By **default** the skill renumbers each antibody in **Kabat** (via **ANARCI** / `abnumber`) and
+builds a full **region map**: framework regions (**HFR1–4** heavy / **LFR1–4** light) and CDRs
+(**CDR-H1–3** / **CDR-L1–3**), each with its **1-based residue range and length**, then the
+constant region as **Tail** (from abstar's `c_sequence_aa`, labelled by isotype), and a
+**total**. Switch scheme with `--numbering {kabat,chothia,imgt,aho,martin}` or turn it off with
+`--numbering none`.
 
-- `numbering_<scheme>.csv` — per-sequence FR/CDR sequences and lengths in that scheme
-- `numbering_<scheme>_positions.tsv` — per-residue position labels (e.g. `H100A`)
+**Present it as a table** — `Region | Sequence fragment | Residues | Length` — one row per
+region in order (HFR1, CDR-H1, HFR2, CDR-H2, HFR3, CDR-H3, HFR4, Tail) plus a **total** row, e.g.:
 
-The script prints the scheme's CDRs (single sequence) or CDR-length summary (many). CDR
-boundaries differ by scheme — e.g. IMGT CDR3 `AR...FQD` (len 22) vs Kabat CDR3 `...FQD`
-(len 20) for the same antibody. Requires `anarci` + `abnumber` + HMMER (installed here; the
-script auto-finds `hmmscan`). It runs `hmmscan` per sequence, so it's auto-skipped above
-`--numbering-cap` (default 1000 sequences) to keep large runs fast.
+| Region | Sequence fragment | Residues | Length |
+|---|---|---|---:|
+| HFR1 | QVHLVESGGGVVQPGRSLRLSCAASGFTFS | 1–30 | 30 |
+| CDR-H1 | SYGMH | 31–35 | 5 |
+| … | … | … | … |
+| Tail (constant IGHG1) | STKGPSVFPLAP… | 119–178 | 60 |
+| **total** | | | **178** |
+
+The script prints exactly this for a single sequence; for many it prints a CDR3-length summary.
+Saves `numbering_<scheme>.csv` (the region map) and `numbering_<scheme>_positions.tsv`
+(per-residue labels like `H100A`). CDR boundaries differ by scheme — e.g. IMGT CDR3 `AR…FQD`
+(22) vs Kabat CDR3 `…FQD` (20). Requires `anarci` + `abnumber` + HMMER (installed here;
+auto-finds `hmmscan`); runs `hmmscan` per sequence, so it's auto-skipped above `--numbering-cap`
+(default 1000).
 
 ## What gets saved (per run)
 

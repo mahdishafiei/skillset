@@ -458,10 +458,11 @@ def _ensure_hmmer_on_path():
 
 
 def compute_numbering(df, run_dir, scheme):
-    """Renumber each antibody variable domain in `scheme` (kabat, chothia, imgt, aho,
-    martin) using ANARCI via abnumber. Writes numbering_<scheme>.csv (per-sequence
-    FR/CDR seqs + lengths) and numbering_<scheme>_positions.tsv (per-residue labels
-    like H100A). Returns a small summary dict."""
+    """Renumber each antibody with ANARCI (via abnumber) in `scheme` and build a full region
+    map: framework regions (HFR/LFR) and CDRs (CDR-H/CDR-L) with 1-based residue ranges and
+    lengths, then the constant region as 'Tail' (from abstar's c_sequence_aa) and a total.
+    Writes numbering_<scheme>.csv (the region map) and numbering_<scheme>_positions.tsv
+    (per-residue labels like H100A). Returns a summary incl. the single sequence's map."""
     _ensure_hmmer_on_path()
     import polars as pl
 
@@ -469,61 +470,70 @@ def compute_numbering(df, run_dir, scheme):
         from abnumber import Chain
     except Exception as e:  # anarci/abnumber not installed
         return {"scheme": scheme, "error": f"abnumber/anarci not available: {e}"}
-
     if "sequence_aa" not in df.columns:
         return {"scheme": scheme, "error": "no sequence_aa column in abstar output"}
 
-    cols = ["fr1", "cdr1", "fr2", "cdr2", "fr3", "cdr3", "fr4",
-            "cdr1_len", "cdr2_len", "cdr3_len"]
-    rows, pos_rows = [], []
+    def _labels(ct):  # HFR1/CDR-H1 for heavy, LFR1/CDR-L1 for light
+        x = "H" if ct == "H" else "L"
+        return {"fr1": f"{x}FR1", "cdr1": f"CDR-{x}1", "fr2": f"{x}FR2", "cdr2": f"CDR-{x}2",
+                "fr3": f"{x}FR3", "cdr3": f"CDR-{x}3", "fr4": f"{x}FR4"}
+
+    order = ["fr1", "cdr1", "fr2", "cdr2", "fr3", "cdr3", "fr4"]
+    have_c, have_cc = "c_sequence_aa" in df.columns, "c_call" in df.columns
+    sel = ["sequence_id", "sequence_aa"] + (["c_sequence_aa"] if have_c else []) + (["c_call"] if have_cc else [])
+
+    map_rows, pos_rows, cdr3_lens = [], [], []
     n_ok = n_fail = 0
-    for r in df.select(["sequence_id", "sequence_aa"]).iter_rows(named=True):
+    single = None
+    for r in df.select(sel).iter_rows(named=True):
         sid, aa = r["sequence_id"], r["sequence_aa"]
-        row = {"sequence_id": sid, "numbered": False, "chain_type": None}
-        row.update({c: None for c in cols})
         if not aa:
             n_fail += 1
-            rows.append(row)
             continue
         try:
             c = Chain(str(aa), scheme=scheme)
         except Exception:
             n_fail += 1
-            rows.append(row)
             continue
         n_ok += 1
-        row.update({
-            "numbered": True, "chain_type": c.chain_type,
-            "fr1": c.fr1_seq, "cdr1": c.cdr1_seq, "fr2": c.fr2_seq, "cdr2": c.cdr2_seq,
-            "fr3": c.fr3_seq, "cdr3": c.cdr3_seq, "fr4": c.fr4_seq,
-            "cdr1_len": len(c.cdr1_seq), "cdr2_len": len(c.cdr2_seq), "cdr3_len": len(c.cdr3_seq),
-        })
-        rows.append(row)
-        for pos, resi in c:
-            pos_rows.append({"sequence_id": sid, "position": str(pos),
-                             "residue": resi, "region": pos.get_region()})
+        lab = _labels(c.chain_type)
+        seqs = {"fr1": c.fr1_seq, "cdr1": c.cdr1_seq, "fr2": c.fr2_seq, "cdr2": c.cdr2_seq,
+                "fr3": c.fr3_seq, "cdr3": c.cdr3_seq, "fr4": c.fr4_seq}
+        cdr3_lens.append(len(c.cdr3_seq))
+        pos, rmap = 0, []
+        for k in order:
+            s = seqs[k] or ""
+            if not s:
+                continue
+            rmap.append({"sequence_id": sid, "region": lab[k], "aa_start": pos + 1,
+                         "aa_end": pos + len(s), "length": len(s), "sequence": s, "note": ""})
+            pos += len(s)
+        c_aa = r.get("c_sequence_aa") if have_c else None
+        if c_aa:  # constant region (CH/CL) from abstar, shown as the Tail
+            cc = (r.get("c_call") if have_cc else None) or "constant"
+            rmap.append({"sequence_id": sid, "region": "Tail", "aa_start": pos + 1,
+                         "aa_end": pos + len(c_aa), "length": len(c_aa), "sequence": c_aa,
+                         "note": f"constant ({cc})"})
+            pos += len(c_aa)
+        map_rows.extend(rmap)
+        for p, resi in c:
+            pos_rows.append({"sequence_id": sid, "position": str(p), "residue": resi,
+                             "region": p.get_region()})
+        if single is None:
+            single = {"chain_type": c.chain_type, "regions": rmap, "total": pos}
 
-    if rows:
-        pl.DataFrame(rows).write_csv(os.path.join(run_dir, f"numbering_{scheme}.csv"))
+    if map_rows:
+        pl.DataFrame(map_rows).write_csv(os.path.join(run_dir, f"numbering_{scheme}.csv"))
     if pos_rows:
         pl.DataFrame(pos_rows).write_csv(
-            os.path.join(run_dir, f"numbering_{scheme}_positions.tsv"), separator="\t"
-        )
+            os.path.join(run_dir, f"numbering_{scheme}_positions.tsv"), separator="\t")
 
-    ok = [r for r in rows if r["numbered"]]
     out = {"scheme": scheme, "n_numbered": n_ok, "n_failed": n_fail}
-    if ok:
-        c3 = [r["cdr3_len"] for r in ok]
-        out["cdr_len_summary"] = {
-            "cdr1_mean": round(sum(r["cdr1_len"] for r in ok) / len(ok), 1),
-            "cdr2_mean": round(sum(r["cdr2_len"] for r in ok) / len(ok), 1),
-            "cdr3_mean": round(sum(c3) / len(c3), 1),
-            "cdr3_range": [min(c3), max(c3)],
-        }
-        if len(ok) == 1:
-            e = ok[0]
-            out["example"] = {"chain_type": e["chain_type"], "cdr1": e["cdr1"],
-                              "cdr2": e["cdr2"], "cdr3": e["cdr3"]}
+    if cdr3_lens:
+        out["cdr3_len_summary"] = {"mean": round(sum(cdr3_lens) / len(cdr3_lens), 1),
+                                   "range": [min(cdr3_lens), max(cdr3_lens)]}
+    if single is not None and df.height == 1:
+        out["region_map"] = single
     return out
 
 
@@ -586,19 +596,23 @@ def write_report(summary, run_dir, meta, charts):
     nb = summary.get("_numbering")
     if nb and not nb.get("error"):
         s = nb["scheme"]
-        lines.append(f"## {s.capitalize()} numbering (ANARCI/abnumber)")
+        lines.append(f"## {s.capitalize()} region map (ANARCI/abnumber)")
         lines.append("")
         lines.append(f"Renumbered {nb['n_numbered']}/{nb['n_numbered'] + nb['n_failed']} sequences in the **{s}** scheme.")
-        if nb.get("example"):
-            e = nb["example"]
+        rm = nb.get("region_map")
+        if rm:
             lines.append("")
-            lines.append(f"- chain: **{e['chain_type']}**")
-            lines.append(f"- {s} CDR1: `{e['cdr1']}`")
-            lines.append(f"- {s} CDR2: `{e['cdr2']}`")
-            lines.append(f"- {s} CDR3: `{e['cdr3']}`")
-        elif nb.get("cdr_len_summary"):
-            cs = nb["cdr_len_summary"]
-            lines.append(f"- mean CDR lengths: CDR1 {cs['cdr1_mean']}, CDR2 {cs['cdr2_mean']}, CDR3 {cs['cdr3_mean']} (range {cs['cdr3_range'][0]}–{cs['cdr3_range'][1]})")
+            lines.append(f"Chain **{rm['chain_type']}** — residue numbers are 1-based along the protein; **Tail** is the constant region.")
+            lines.append("")
+            lines.append("| Region | Sequence fragment | Residues | Length |")
+            lines.append("|---|---|---|---:|")
+            for r in rm["regions"]:
+                note = f" ({r['note']})" if r.get("note") else ""
+                lines.append(f"| {r['region']}{note} | `{r['sequence']}` | {r['aa_start']}–{r['aa_end']} | {r['length']} |")
+            lines.append(f"| **total** | | | **{rm['total']}** |")
+        elif nb.get("cdr3_len_summary"):
+            cs = nb["cdr3_len_summary"]
+            lines.append(f"- {s} CDR3 length: mean {cs['mean']}, range {cs['range'][0]}–{cs['range'][1]}")
         lines.append("")
 
     if charts:
@@ -618,7 +632,7 @@ def write_report(summary, run_dir, meta, charts):
     lines.append("- `charts/` — PNG charts")
     if nb and not nb.get("error"):
         s = nb["scheme"]
-        lines.append(f"- `numbering_{s}.csv` — per-sequence {s} FR/CDR sequences & lengths")
+        lines.append(f"- `numbering_{s}.csv` — {s} region map (FR/CDR + Tail, residues & lengths)")
         lines.append(f"- `numbering_{s}_positions.tsv` — per-residue {s} position labels (e.g. H100A)")
 
     with open(os.path.join(run_dir, "report.md"), "w") as f:
@@ -775,7 +789,7 @@ def main():
         print("top J genes: " + ", ".join(f"{v} {p}%" for v, _, p in summary["j_gene_usage"][:5]))
     if summary.get("isotype_usage"):
         print("isotypes: " + ", ".join(f"{v} {p}%" for v, _, p in summary["isotype_usage"][:6]))
-    if region_map:
+    if region_map and not (numbering and numbering.get("region_map")):
         print("region map (IMGT regions from abstar; residue # along the protein):")
         for r in region_map:
             print(f"  {r['region']:<11} {r['aa_start']:>3}-{r['aa_end']:<4} {r['kind']:<16} {r['sequence']}")
@@ -783,13 +797,17 @@ def main():
         s = numbering["scheme"]
         total = numbering["n_numbered"] + numbering["n_failed"]
         print(f"{s} numbering: {numbering['n_numbered']}/{total} numbered (ANARCI/abnumber)")
-        if numbering.get("example"):
-            e = numbering["example"]
-            print(f"  {s} CDRs [{e['chain_type']}]: CDR1={e['cdr1']}  CDR2={e['cdr2']}  CDR3={e['cdr3']}")
-        elif numbering.get("cdr_len_summary"):
-            cs = numbering["cdr_len_summary"]
-            print(f"  {s} CDR3 length: mean {cs['cdr3_mean']}, range {cs['cdr3_range'][0]}-{cs['cdr3_range'][1]}")
-        print(f"  files: numbering_{s}.csv, numbering_{s}_positions.tsv")
+        rm = numbering.get("region_map")
+        if rm:
+            print(f"  {s} region map (chain {rm['chain_type']}) — region | residues | length | sequence:")
+            for r in rm["regions"]:
+                extra = f"  [{r['note']}]" if r.get("note") else ""
+                print(f"    {r['region']:<8} {r['aa_start']:>3}-{r['aa_end']:<4} {r['length']:>3}  {r['sequence']}{extra}")
+            print(f"    total: {rm['total']} aa")
+        elif numbering.get("cdr3_len_summary"):
+            cs = numbering["cdr3_len_summary"]
+            print(f"  {s} CDR3 length: mean {cs['mean']}, range {cs['range'][0]}-{cs['range'][1]}")
+        print(f"  files: numbering_{s}.csv (region map), numbering_{s}_positions.tsv")
     elif numbering and numbering.get("error"):
         print(f"numbering ({numbering['scheme']}) unavailable: {numbering['error']}")
     if patched:
