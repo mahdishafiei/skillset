@@ -588,8 +588,9 @@ def write_report(summary, run_dir, meta, charts):
     if summary.get("_backtranslated"):
         lines.append(
             f"- ⚠️ {summary['_backtranslated']} amino-acid sequence(s) were reverse-translated to "
-            "nucleotide (dnachisel, randomized codons). Gene calls, regions and CDR3 (aa) are valid; "
-            "**nucleotide-level SHM / mutation counts are not biologically meaningful** for these."
+            "nucleotide (dnachisel, randomized codons). V/J gene calls, regions and CDR3 (aa) are valid; "
+            "**the D-gene call and nucleotide-level SHM / mutation counts are not biologically meaningful** "
+            "for these (both rely on germline junction/nt information overwritten by codon randomization)."
         )
     if "pct_productive" in summary:
         lines.append(f"- productive: **{summary['n_productive']}/{summary['n_sequences']} ({summary['pct_productive']}%)**")
@@ -617,6 +618,13 @@ def write_report(summary, run_dir, meta, charts):
 
     table("Top V genes", summary.get("v_gene_usage", []))
     table("Top J genes", summary.get("j_gene_usage", []))
+    if summary.get("_d_call_unreliable"):
+        lines.append("## Top D genes")
+        lines.append("")
+        lines.append("_n/a — amino-acid input: D-gene assignment needs junction nucleotides, not recoverable from aa._")
+        lines.append("")
+    else:
+        table("Top D genes", summary.get("d_gene_usage", []))
     if summary.get("isotype_usage"):
         table("Isotypes", summary["isotype_usage"])
 
@@ -811,6 +819,19 @@ def main():
     all_backtranslated = bool(n_backtranslated) and n_backtranslated == summary["n_sequences"]
     summary["_backtranslated"] = n_backtranslated
     summary["_all_backtranslated"] = all_backtranslated
+    # D-gene assignment is a short nucleotide-motif match across the (heavily
+    # trimmed) D segment in the junction — unlike V/J, the amino-acid sequence
+    # does not constrain it. Back-translation with randomized codons overwrites
+    # the germline junction nucleotides, so any D call on amino-acid input is
+    # noise. Flag it n/a (same category as SHM) rather than reporting a guess.
+    summary["_d_call_unreliable"] = bool(n_backtranslated)
+    if all_backtranslated:
+        summary["_d_gene_usage_backtranslated"] = summary.get("d_gene_usage", [])
+        summary["d_gene_usage"] = []
+        summary["d_gene_note"] = (
+            "n/a — amino-acid input: D-gene assignment requires the germline "
+            "nucleotides in the junction, which codon randomization overwrites"
+        )
     summary["_meta"] = meta
     summary["_charts"] = [os.path.relpath(c, run_dir) for c in charts]
     with open(os.path.join(run_dir, "summary.json"), "w") as f:
@@ -823,7 +844,7 @@ def main():
     if n_backtranslated:
         print(
             f"input: {n_backtranslated} amino-acid sequence(s) back-translated to nucleotide "
-            "(gene calls, regions & CDR3-aa are valid; nt-level SHM/mutations are NOT meaningful)"
+            "(V/J gene calls, regions & CDR3-aa are valid; D-gene call and nt-level SHM/mutations are NOT meaningful)"
         )
     if "pct_productive" in summary:
         print(f"productive: {summary['n_productive']}/{summary['n_sequences']} ({summary['pct_productive']}%)")
@@ -840,6 +861,10 @@ def main():
         print("top V genes: " + ", ".join(f"{v} {p}%" for v, _, p in summary["v_gene_usage"][:5]))
     if summary.get("j_gene_usage"):
         print("top J genes: " + ", ".join(f"{v} {p}%" for v, _, p in summary["j_gene_usage"][:5]))
+    if summary.get("_d_call_unreliable"):
+        print("D gene: n/a  (amino-acid input; D assignment needs junction nucleotides — not recoverable from aa)")
+    elif summary.get("d_gene_usage"):
+        print("top D genes: " + ", ".join(f"{v} {p}%" for v, _, p in summary["d_gene_usage"][:5]))
     if summary.get("isotype_usage"):
         print("isotypes: " + ", ".join(f"{v} {p}%" for v, _, p in summary["isotype_usage"][:6]))
     if imgt_map:

@@ -51,9 +51,14 @@ automatically), the wrapper reverse-translates it to nucleotide with
 (reading via `abutils.io.read_fasta`) before running abstar — no action needed from you.
 Detection is per-sequence, so mixed aa/nt input works.
 
-When this happens, tell the user: **gene calls, regions, and CDR3 (aa) are valid, but
-nucleotide-level SHM / mutation counts are NOT meaningful** (the codons were invented by the
-back-translation). The script already prints this caveat and marks SHM as `n/a`.
+When this happens, tell the user: **V/J gene calls, regions, and CDR3 (aa) are valid, but the
+D-gene call and nucleotide-level SHM / mutation counts are NOT meaningful** (the codons were
+invented by the back-translation). The **D call** is unreliable because D assignment is a short
+nucleotide-motif match across the heavily-trimmed D segment in the junction — the amino-acid
+sequence does not constrain it, and codon randomization overwrites the germline junction
+nucleotides. V and J survive because they span long, amino-acid-diagnostic regions. The script
+already prints this caveat and marks both SHM **and the D gene** as `n/a` (raw guess preserved in
+the JSON under `_d_gene_usage_backtranslated`). **Do not report a D gene for amino-acid input.**
 
 ## Region maps + variable-region sequence
 
