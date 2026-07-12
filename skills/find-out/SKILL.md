@@ -79,8 +79,9 @@ Write at PhD-student level: rigorous and precise, but explain every non-obvious 
      -V fontsize=11pt \
      --syntax-highlighting=tango
    ```
+   **Font consistency (important):** use this command **exactly as written** so every run looks identical. Keep the **default Latin Modern Roman** font — do **NOT** add `-V mainfont=...` and do **NOT** switch to Arial/another font, even to dodge a missing-glyph warning. Fix special-character/glyph problems by **escaping them into LaTeX math** (e.g. `$\beta$`, `$\times$`, `$\leq 8$`) or plain-ASCII wording — never by changing the font.
 3. Confirm the `.pdf` exists and is non-empty (`ls -la`, `file`).
-4. **Retry until it works** (up to 3 attempts), changing something each time: (1) read the LaTeX error and fix the offending Markdown (unbalanced `$`, a `$…$` closed right before a digit, a bad table/image path); (2) simplify — drop a broken figure, replace exotic Unicode with plain equivalents; (3) fall back to `--pdf-engine=pdflatex`, drop `--toc`, or `--syntax-highlighting=none`. Only after 3 genuine failures, save the Markdown as a fallback and tell the user exactly what blocked the PDF. Never silently produce nothing.
+4. **Retry until it works** (up to 3 attempts), changing something each time — but **never change the font**: (1) read the LaTeX error and fix the offending Markdown (unbalanced `$`, a `$…$` closed right before a digit, a bad table/image path); (2) simplify — drop a broken figure, replace exotic Unicode with a LaTeX-math or plain-ASCII equivalent; (3) as a last resort try `--pdf-engine=pdflatex` or `--syntax-highlighting=none` (still no `mainfont` change). Only after 3 genuine failures, save the Markdown as a fallback and tell the user exactly what blocked the PDF. Never silently produce nothing.
 
 Keep the temp Markdown — Step 6 reuses its content for the audio script.
 
