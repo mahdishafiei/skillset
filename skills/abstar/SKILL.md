@@ -55,14 +55,26 @@ When this happens, tell the user: **gene calls, regions, and CDR3 (aa) are valid
 nucleotide-level SHM / mutation counts are NOT meaningful** (the codons were invented by the
 back-translation). The script already prints this caveat and marks SHM as `n/a`.
 
-## Region map (FR/CDR + constant, with residue numbers)
+## Region maps + variable-region sequence
 
-Every run builds an **IMGT region map** straight from abstar: FR1–FR4 and CDR1–CDR3 (IMGT)
-plus the **constant region** (CH for heavy / CL for light, labelled by isotype from `c_call`),
-each with its **1-based residue range** along the protein (FR1 = residue 1; the constant region
-continues after FR4). It's always saved as `region_map.csv` (the abstar-native, IMGT reference).
-With the default **Kabat** numbering active, the region map you *show the user* is the Kabat one
-(see the Numbering section below); only when `--numbering none` do you show this IMGT map. The constant region is whatever abstar's C-assignment captured (typically the
+Every run produces **two** region-map tables, and you should **show the user both**, in the same
+`Region | Sequence fragment | Residues | Length` format (with a **total** row):
+
+1. **IMGT region map** (from abstar) — FR/CDR boundaries per IMGT. Saved as `region_map.csv`.
+2. **Kabat region map** (from ANARCI/`abnumber`, the default scheme) — Kabat boundaries. Saved as
+   `numbering_kabat.csv`.
+
+Both list HFR1–4 / LFR1–4 and CDR-H/L1–3, then the constant region as **Tail** (isotype-labelled),
+each with a 1-based residue range and length. The boundaries differ between schemes (e.g. IMGT
+CDR-H1 `GFTFSSYG` at 26–33 vs Kabat CDR-H1 `SYGMH` at 31–35) — that difference is the point.
+
+**At the very end**, show the **variable region only** (constant truncated): abstar's `sequence`
+(nucleotide) and `sequence_aa` (amino acid) — the V(D)J with the constant region removed. Saved as
+`variable_region.fasta` / `variable_region_aa.fasta`.
+
+**Present order:** gene-usage table → IMGT region-map table → Kabat region-map table →
+variable-region sequence. The script prints all of this for a single sequence (the region maps as
+`region | residues | length | sequence` lines, and the variable region as `nt` + `aa`). The constant region is whatever abstar's C-assignment captured (typically the
 start of CH1) — do **not** invent CH1/hinge/CH2/CH3 sub-boundaries or EU numbers; abstar
 doesn't provide them.
 
@@ -97,8 +109,9 @@ auto-finds `hmmscan`); runs `hmmscan` per sequence, so it's auto-skipped above `
 
 A timestamped folder under `06_VS_code/abstar_runs/` containing:
 `airr/*.tsv` (all 147 fields), `parquet/*.parquet`, `gene_usage.csv`, `region_map.csv`
-(FR/CDR + constant residue ranges), `summary.json`, `report.md`, and `charts/` (V-gene usage,
-J-gene usage, isotype/locus, CDR3-length). With `--numbering`, also `numbering_<scheme>.csv`
+(IMGT FR/CDR + constant ranges), `variable_region.fasta` / `variable_region_aa.fasta`
+(constant truncated), `summary.json`, `report.md`, and `charts/` (V-gene usage, J-gene usage,
+isotype/locus, CDR3-length). With `--numbering`, also `numbering_<scheme>.csv` (the region map)
 and `numbering_<scheme>_positions.tsv`.
 
 ## Building on top of it

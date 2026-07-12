@@ -6,8 +6,10 @@
 [**abstar**](https://github.com/brineylab/abstar) VDJ annotator on your sequences and returns:
 
 - **Per-sequence annotation** — locus, V/D/J/C gene calls, CDR3 (aa), productivity, and SHM%.
-- **Region map** — FR1–FR4, CDR1–CDR3 (IMGT) and the constant (CH/CL) region, each with its
-  residue range (e.g. "FR1: 1–25 … constant IGHG1: 119–178").
+- **Region maps** — two tables (`Region | Sequence fragment | Residues | Length`): **IMGT**
+  (from abstar) and **Kabat** (ANARCI), each with HFR/LFR + CDR-H/L regions, the constant **Tail**,
+  and a total.
+- **Variable region only** — the V(D)J sequence with the constant truncated (nt + aa).
 - **Gene-usage summary** — V/J gene frequencies, CDR3-length distribution, isotype breakdown.
 - **Publication-quality charts** and the **full AIRR TSV + Parquet** (all 147 fields), saved
   to a timestamped run folder.

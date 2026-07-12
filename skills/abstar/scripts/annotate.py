@@ -309,48 +309,92 @@ def compute_summary(df, run_dir):
 
 
 # ---------------------------------------------------------------------------
-# region map: FR/CDR (IMGT, from abstar) + constant (CH/CL) with residue ranges
+# region map: FR/CDR + constant (Tail) with residue ranges — shared by IMGT & numbering
 # ---------------------------------------------------------------------------
-_REGION_ORDER = [
-    ("FR1", "fwr1_aa"), ("CDR1", "cdr1_aa"), ("FR2", "fwr2_aa"), ("CDR2", "cdr2_aa"),
-    ("FR3", "fwr3_aa"), ("CDR3", "cdr3_aa"), ("FR4", "fwr4_aa"),
+_IMGT_REGION_ORDER = [
+    ("fr1", "fwr1_aa"), ("cdr1", "cdr1_aa"), ("fr2", "fwr2_aa"), ("cdr2", "cdr2_aa"),
+    ("fr3", "fwr3_aa"), ("cdr3", "cdr3_aa"), ("fr4", "fwr4_aa"),
 ]
 
 
+def _region_labels(ct):  # HFR1/CDR-H1 for heavy, LFR1/CDR-L1 for light
+    x = "H" if ct == "H" else "L"
+    return {"fr1": f"{x}FR1", "cdr1": f"CDR-{x}1", "fr2": f"{x}FR2", "cdr2": f"CDR-{x}2",
+            "fr3": f"{x}FR3", "cdr3": f"CDR-{x}3", "fr4": f"{x}FR4"}
+
+
+def _chain_type_from_locus(locus):
+    return "H" if str(locus).upper() in ("IGH", "TRB", "TRD") else "L"
+
+
+def _print_region_map(title, rmap):
+    print(f"{title} (chain {rmap['chain_type']}) — region | residues | length | sequence:")
+    for r in rmap["regions"]:
+        note = f"  [{r['note']}]" if r.get("note") else ""
+        print(f"  {r['region']:<10} {r['aa_start']:>3}-{r['aa_end']:<4} {r['length']:>3}  {r['sequence']}{note}")
+    print(f"  total: {rmap['total']} aa")
+
+
 def build_region_maps(df, run_dir):
-    """Per-sequence residue map: FR1-4 and CDR1-3 (IMGT, straight from abstar) plus the
-    constant region (CH for heavy / CL for light, labelled by isotype/c_call), each with a
-    1-based residue range along the protein. Writes region_map.csv. Returns the single
-    sequence's map when there is exactly one input."""
+    """IMGT region map straight from abstar: FR1-4 + CDR1-3 plus the constant region as
+    'Tail' (labelled by isotype), each with a 1-based residue range and length, and a total.
+    Writes region_map.csv (all sequences). Returns the single sequence's map as
+    {scheme, chain_type, regions, total} when there is exactly one input."""
     import polars as pl
 
-    need = [c for _, c in _REGION_ORDER] + ["c_sequence_aa", "c_call", "sequence_id"]
+    need = [c for _, c in _IMGT_REGION_ORDER] + ["c_sequence_aa", "c_call", "locus", "sequence_id"]
     sub = df.select([c for c in need if c in df.columns])
     out_rows, single = [], None
     for row in sub.iter_rows(named=True):
         sid = row.get("sequence_id")
+        ct = _chain_type_from_locus(row.get("locus"))
+        lab = _region_labels(ct)
         pos, rmap = 0, []
-        for label, col in _REGION_ORDER:  # V-domain regions tile sequence_aa in order
+        for key, col in _IMGT_REGION_ORDER:  # V-domain regions tile sequence_aa in order
             seq = row.get(col)
             if seq:
-                rmap.append({"sequence_id": sid, "region": label, "kind": "V-domain (IMGT)",
-                             "aa_start": pos + 1, "aa_end": pos + len(seq),
-                             "length": len(seq), "sequence": seq})
+                rmap.append({"sequence_id": sid, "region": lab[key], "aa_start": pos + 1,
+                             "aa_end": pos + len(seq), "length": len(seq), "sequence": seq, "note": ""})
                 pos += len(seq)
         c = row.get("c_sequence_aa")  # constant region translated separately by abstar
         if c:
             cc = row.get("c_call") or "constant"
-            kind = "constant (CH)" if str(cc).startswith("IGH") else "constant (CL)"
-            rmap.append({"sequence_id": sid, "region": f"C:{cc}", "kind": kind,
-                         "aa_start": pos + 1, "aa_end": pos + len(c),
-                         "length": len(c), "sequence": c})
+            rmap.append({"sequence_id": sid, "region": "Tail", "aa_start": pos + 1,
+                         "aa_end": pos + len(c), "length": len(c), "sequence": c,
+                         "note": f"constant ({cc})"})
             pos += len(c)
         if rmap:
             out_rows.extend(rmap)
             if single is None:
-                single = rmap
+                single = {"scheme": "imgt", "chain_type": ct, "regions": rmap, "total": pos}
     if out_rows:
         pl.DataFrame(out_rows).write_csv(os.path.join(run_dir, "region_map.csv"))
+    return single if df.height == 1 else None
+
+
+def extract_variable_region(df, run_dir):
+    """abstar's `sequence` is the V(D)J variable region (constant truncated) and `sequence_aa`
+    its translation. Writes variable_region.fasta (nt) + variable_region_aa.fasta (aa) for all
+    sequences; returns the single sequence's {nt, aa} when there is exactly one input."""
+    cols = [c for c in ["sequence_id", "sequence", "sequence_aa"] if c in df.columns]
+    if "sequence" not in cols and "sequence_aa" not in cols:
+        return None
+    nt_lines, aa_lines, single = [], [], None
+    for r in df.select(cols).iter_rows(named=True):
+        sid = r.get("sequence_id") or "seq"
+        nt, aa = r.get("sequence"), r.get("sequence_aa")
+        if nt:
+            nt_lines.append(f">{sid}\n{nt}")
+        if aa:
+            aa_lines.append(f">{sid}\n{aa}")
+        if single is None and (nt or aa):
+            single = {"sequence_id": sid, "nt": nt, "aa": aa}
+    if nt_lines:
+        with open(os.path.join(run_dir, "variable_region.fasta"), "w") as f:
+            f.write("\n".join(nt_lines) + "\n")
+    if aa_lines:
+        with open(os.path.join(run_dir, "variable_region_aa.fasta"), "w") as f:
+            f.write("\n".join(aa_lines) + "\n")
     return single if df.height == 1 else None
 
 
@@ -473,11 +517,6 @@ def compute_numbering(df, run_dir, scheme):
     if "sequence_aa" not in df.columns:
         return {"scheme": scheme, "error": "no sequence_aa column in abstar output"}
 
-    def _labels(ct):  # HFR1/CDR-H1 for heavy, LFR1/CDR-L1 for light
-        x = "H" if ct == "H" else "L"
-        return {"fr1": f"{x}FR1", "cdr1": f"CDR-{x}1", "fr2": f"{x}FR2", "cdr2": f"CDR-{x}2",
-                "fr3": f"{x}FR3", "cdr3": f"CDR-{x}3", "fr4": f"{x}FR4"}
-
     order = ["fr1", "cdr1", "fr2", "cdr2", "fr3", "cdr3", "fr4"]
     have_c, have_cc = "c_sequence_aa" in df.columns, "c_call" in df.columns
     sel = ["sequence_id", "sequence_aa"] + (["c_sequence_aa"] if have_c else []) + (["c_call"] if have_cc else [])
@@ -496,7 +535,7 @@ def compute_numbering(df, run_dir, scheme):
             n_fail += 1
             continue
         n_ok += 1
-        lab = _labels(c.chain_type)
+        lab = _region_labels(c.chain_type)
         seqs = {"fr1": c.fr1_seq, "cdr1": c.cdr1_seq, "fr2": c.fr2_seq, "cdr2": c.cdr2_seq,
                 "fr3": c.fr3_seq, "cdr3": c.cdr3_seq, "fr4": c.fr4_seq}
         cdr3_lens.append(len(c.cdr3_seq))
@@ -520,7 +559,7 @@ def compute_numbering(df, run_dir, scheme):
             pos_rows.append({"sequence_id": sid, "position": str(p), "residue": resi,
                              "region": p.get_region()})
         if single is None:
-            single = {"chain_type": c.chain_type, "regions": rmap, "total": pos}
+            single = {"scheme": scheme, "chain_type": c.chain_type, "regions": rmap, "total": pos}
 
     if map_rows:
         pl.DataFrame(map_rows).write_csv(os.path.join(run_dir, f"numbering_{scheme}.csv"))
@@ -581,39 +620,50 @@ def write_report(summary, run_dir, meta, charts):
     if summary.get("isotype_usage"):
         table("Isotypes", summary["isotype_usage"])
 
-    rmap = summary.get("_region_map")
-    if rmap:
-        lines.append("## Region map (IMGT regions from abstar)")
+    def region_table(title, rmap):
+        if not (rmap and rmap.get("regions")):
+            return
+        lines.append(f"## {title}")
         lines.append("")
-        lines.append("Residue numbers are 1-based along the protein (FR1 = residue 1); the constant region continues after FR4.")
+        lines.append(f"Chain **{rmap['chain_type']}** — residue numbers 1-based along the protein; **Tail** is the constant region.")
         lines.append("")
-        lines.append("| region | residues (aa) | length | sequence |")
-        lines.append("|---|---|---:|---|")
-        for r in rmap:
-            lines.append(f"| {r['region']} ({r['kind']}) | {r['aa_start']}–{r['aa_end']} | {r['length']} | `{r['sequence']}` |")
+        lines.append("| Region | Sequence fragment | Residues | Length |")
+        lines.append("|---|---|---|---:|")
+        for r in rmap["regions"]:
+            note = f" ({r['note']})" if r.get("note") else ""
+            lines.append(f"| {r['region']}{note} | `{r['sequence']}` | {r['aa_start']}–{r['aa_end']} | {r['length']} |")
+        lines.append(f"| **total** | | | **{rmap['total']}** |")
         lines.append("")
+
+    region_table("IMGT region map (abstar)", summary.get("_region_map"))
 
     nb = summary.get("_numbering")
     if nb and not nb.get("error"):
         s = nb["scheme"]
-        lines.append(f"## {s.capitalize()} region map (ANARCI/abnumber)")
-        lines.append("")
-        lines.append(f"Renumbered {nb['n_numbered']}/{nb['n_numbered'] + nb['n_failed']} sequences in the **{s}** scheme.")
-        rm = nb.get("region_map")
-        if rm:
-            lines.append("")
-            lines.append(f"Chain **{rm['chain_type']}** — residue numbers are 1-based along the protein; **Tail** is the constant region.")
-            lines.append("")
-            lines.append("| Region | Sequence fragment | Residues | Length |")
-            lines.append("|---|---|---|---:|")
-            for r in rm["regions"]:
-                note = f" ({r['note']})" if r.get("note") else ""
-                lines.append(f"| {r['region']}{note} | `{r['sequence']}` | {r['aa_start']}–{r['aa_end']} | {r['length']} |")
-            lines.append(f"| **total** | | | **{rm['total']}** |")
+        if nb.get("region_map"):
+            region_table(f"{s.capitalize()} region map (ANARCI/abnumber)", nb["region_map"])
         elif nb.get("cdr3_len_summary"):
             cs = nb["cdr3_len_summary"]
-            lines.append(f"- {s} CDR3 length: mean {cs['mean']}, range {cs['range'][0]}–{cs['range'][1]}")
+            lines.append(f"## {s.capitalize()} numbering (ANARCI/abnumber)")
+            lines.append("")
+            lines.append(f"Renumbered {nb['n_numbered']}/{nb['n_numbered'] + nb['n_failed']} sequences. "
+                         f"{s} CDR3 length: mean {cs['mean']}, range {cs['range'][0]}–{cs['range'][1]}.")
+            lines.append("")
+
+    vr = summary.get("_variable_region")
+    if vr:
+        lines.append("## Variable region only (constant truncated)")
         lines.append("")
+        if vr.get("nt"):
+            lines.append(f"**nucleotide** ({len(vr['nt'])} nt)")
+            lines.append("")
+            lines.append(f"```\n{vr['nt']}\n```")
+            lines.append("")
+        if vr.get("aa"):
+            lines.append(f"**amino acid** ({len(vr['aa'])} aa)")
+            lines.append("")
+            lines.append(f"```\n{vr['aa']}\n```")
+            lines.append("")
 
     if charts:
         lines.append("## Charts")
@@ -628,6 +678,7 @@ def write_report(summary, run_dir, meta, charts):
     lines.append("- `parquet/` — Parquet output")
     lines.append("- `gene_usage.csv` — machine-readable usage table")
     lines.append("- `region_map.csv` — per-sequence FR/CDR + constant residue ranges (IMGT)")
+    lines.append("- `variable_region.fasta` / `variable_region_aa.fasta` — variable region, constant truncated (nt / aa)")
     lines.append("- `summary.json` — full summary")
     lines.append("- `charts/` — PNG charts")
     if nb and not nb.get("error"):
@@ -731,8 +782,10 @@ def main():
         sys.exit(0)
 
     summary = compute_summary(df, run_dir)
-    region_map = build_region_maps(df, run_dir)  # None unless single sequence
-    summary["_region_map"] = region_map
+    imgt_map = build_region_maps(df, run_dir)  # dict or None (single sequence)
+    summary["_region_map"] = imgt_map
+    var_region = extract_variable_region(df, run_dir)  # {nt, aa} or None (single sequence)
+    summary["_variable_region"] = var_region
     charts = [] if args.no_charts else make_charts(summary, df, os.path.join(run_dir, "charts"), top=args.top)
 
     numbering = None
@@ -789,27 +842,26 @@ def main():
         print("top J genes: " + ", ".join(f"{v} {p}%" for v, _, p in summary["j_gene_usage"][:5]))
     if summary.get("isotype_usage"):
         print("isotypes: " + ", ".join(f"{v} {p}%" for v, _, p in summary["isotype_usage"][:6]))
-    if region_map and not (numbering and numbering.get("region_map")):
-        print("region map (IMGT regions from abstar; residue # along the protein):")
-        for r in region_map:
-            print(f"  {r['region']:<11} {r['aa_start']:>3}-{r['aa_end']:<4} {r['kind']:<16} {r['sequence']}")
+    if imgt_map:
+        _print_region_map("IMGT region map (abstar)", imgt_map)
     if numbering and not numbering.get("error"):
         s = numbering["scheme"]
         total = numbering["n_numbered"] + numbering["n_failed"]
         print(f"{s} numbering: {numbering['n_numbered']}/{total} numbered (ANARCI/abnumber)")
-        rm = numbering.get("region_map")
-        if rm:
-            print(f"  {s} region map (chain {rm['chain_type']}) — region | residues | length | sequence:")
-            for r in rm["regions"]:
-                extra = f"  [{r['note']}]" if r.get("note") else ""
-                print(f"    {r['region']:<8} {r['aa_start']:>3}-{r['aa_end']:<4} {r['length']:>3}  {r['sequence']}{extra}")
-            print(f"    total: {rm['total']} aa")
+        if numbering.get("region_map"):
+            _print_region_map(f"{s} region map (ANARCI)", numbering["region_map"])
         elif numbering.get("cdr3_len_summary"):
             cs = numbering["cdr3_len_summary"]
             print(f"  {s} CDR3 length: mean {cs['mean']}, range {cs['range'][0]}-{cs['range'][1]}")
         print(f"  files: numbering_{s}.csv (region map), numbering_{s}_positions.tsv")
     elif numbering and numbering.get("error"):
         print(f"numbering ({numbering['scheme']}) unavailable: {numbering['error']}")
+    if var_region:
+        print("variable region only (constant truncated):")
+        if var_region.get("nt"):
+            print(f"  nt ({len(var_region['nt'])}): {var_region['nt']}")
+        if var_region.get("aa"):
+            print(f"  aa ({len(var_region['aa'])}): {var_region['aa']}")
     if patched:
         print("(note: re-applied abutils spaces-in-path patch)")
     print(f"saved to: {run_dir}")
