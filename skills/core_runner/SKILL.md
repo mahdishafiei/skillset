@@ -38,12 +38,30 @@ give you materials and a destination:
 skim any existing code in the source folder (reuse it as the compute script rather than rewriting).
 Build a mental model of: what the job computes, what it reads/writes, and how it splits into units.
 
-Then extract the spec (Step 0), **ask only for the essentials you genuinely can't infer** from what
-they gave you, and build the bundle (Steps 1–4) **into the folder they named** (fall back to
-`<jobname>_coreweave/` only if they didn't specify one). Restate your understanding of the plan
-briefly before generating, so they can correct it.
+## Scope first, build second — talk it through, agree, THEN generate
 
-## Step 0 — the spec to extract (from their description + materials; ask only what's missing)
+Treat this as a short collaboration, not a one-shot generator. **Do NOT create any files until you and
+the user have agreed on the plan.** Work in **short, precise, step-by-step turns** — state the current
+step and the single next action, not long essays.
+
+1. **Rationalize the project (science + mapping).** After ingesting the materials, write a *short*
+   summary of your understanding: the **science goal** (what's being computed and why) and how it maps
+   to a cluster job (job shape, what one **unit** is, inputs + where they come from, outputs,
+   resources, cluster). Reason about the science, not just mechanics — is this the right
+   decomposition? does the output/metric make sense? any correctness pitfalls or better approaches?
+2. **Ask what's missing (important).** Explicitly list the open questions and anything you need but
+   can't infer — the exact compute command, the unit definition, per-task resources + walltime, the
+   cluster, the container, where weights/data live, the output folder. **Ask; don't assume the
+   important ones.** Prefer a tight list of concrete questions.
+3. **Iterate.** Go a few rounds of science + scoping back-and-forth until the terms are settled.
+4. **Confirm, then build.** Once you've agreed, say in one line what you're about to generate, then
+   create the bundle (Steps 1–4) **into the folder the user named** (fall back to
+   `<jobname>_coreweave/` only if none given).
+
+After building, hand back a **short numbered "next steps" list** (stage → copy → `sbatch` → fetch) —
+the exact commands, nothing more.
+
+## Step 0 — the spec to nail down (fill from their materials, ask for the rest)
 
 1. **Compute command** — the exact command that does the work inside the container.
 2. **Job shape:**
@@ -124,8 +142,10 @@ conditional — decide per job and skip what doesn't apply.
   local `/tmp` paths, run ONE unit) and confirm correct output — **fully offline** if the job would
   otherwise hit the network (`HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1`, etc.). Diff against a known
   result if you have one.
-- Write `README.md` (the run flow below) and, if a separate chat will run it, a self-contained
-  `HANDOFF.md` (context + all scripts inlined + steps + gotchas).
+- Write `README.md` from `templates/README.md` — it **must lead with a prominent "How to run
+  (initiate the job)" block** (stage → copy → `sbatch` → fetch, exact commands) as the very first
+  section, before any explanation. If a separate chat/person will run it, also write a self-contained
+  `HANDOFF.md` that likewise opens with that run block, then context + inlined scripts + gotchas.
 
 ## Run flow the package supports (user runs this on the cluster)
 ```
