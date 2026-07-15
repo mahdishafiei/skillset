@@ -1,20 +1,9 @@
 ---
-name: core_runner
-description: >
-  Package any locally-developed compute job into a self-contained, resumable bundle ready to run on
-  the brineylab CoreWeave clusters (B200 EU / RTX PRO 6000 US) via SLURM. Task-agnostic — works for
-  ML training/inference, simulations, bioinformatics pipelines, batch processing, anything that runs
-  as a command in a container. Handles the cluster conventions: container image + mounts, /tmp
-  scratch + cache redirects, s5cmd object-storage staging in/out, CPU thread caps, SLURM partitions
-  + the 24h time cap, and resumability. Invoke it and describe the job in plain English — with any
-  links, file/folder paths, .md design docs, a draft script, and a target output folder; it reads
-  those materials, extracts the spec, and generates the compute scripts + sbatch + staging tailored
-  for CoreWeave. Use whenever the user wants to prepare / port / "make ready" a job for CoreWeave /
-  the B200 / the RTX cluster / SLURM / sbatch. Claude builds the scripts locally; the user runs them
-  on the cluster (never run Claude or compute on the login node).
+name: core-runner
+description: "Package any locally-built compute job into a self-contained, resumable SLURM bundle ready to run on the brineylab CoreWeave clusters (B200 / RTX PRO 6000). Task-agnostic: ML training/inference, simulations, bioinformatics, batch processing - anything that runs as a command in a container. Invoke it and describe the job in plain English, with any links, file/folder paths, .md design docs, a draft script, and a target output folder; it reads those, talks through the science, asks for what is missing, then generates the compute scripts + sbatch + object-storage staging tailored to CoreWeave (container + mounts, /tmp scratch, s5cmd, CPU thread caps, hpc-mid default, the 24h time cap, resumable arrays). Use whenever the user wants to prepare, port, package, or make-ready a job for CoreWeave / the B200 / the RTX cluster / SLURM / sbatch, even if they do not say 'skill'. Claude only builds the scripts; the user runs them on the cluster (never run compute or Claude on the login node)."
 ---
 
-# core_runner — package a job for the CoreWeave SLURM cluster
+# core-runner — package a job for the CoreWeave SLURM cluster
 
 Turn a command the user has built + validated **locally** into a folder they copy to CoreWeave and
 `sbatch`. The compute logic is theirs; this skill wraps it in the lab's cluster conventions so it
