@@ -10,6 +10,7 @@ Each skill lives in [`skills/<name>/`](skills) as a single `SKILL.md` (plus a sh
 |-------|---------|--------------|
 | [**find-out**](skills/find-out) | `/find-out <subject>` | Runs an exhaustive, PhD-level literature review on any subject using parallel research agents, then produces a polished, cited **PDF**, a NotebookLM-style two-host **audio podcast** (MP3), and a transcript — all in one self-contained folder. |
 | [**abstar**](skills/abstar) | `/abstar` | Annotates antibody (BCR) or TCR sequences with the [brineylab **abstar**](https://github.com/brineylab/abstar) VDJ annotator — per-sequence V/D/J/C gene calls, CDR3, productivity, and SHM — plus a **gene-usage summary** and **charts**, saving the full AIRR/Parquet output to a run folder. |
+| [**core_runner**](skills/core_runner) | `/core_runner` | Packages any locally-built compute job into a **self-contained, resumable SLURM bundle** ready to `sbatch` on the brineylab **CoreWeave** clusters (B200 / RTX PRO 6000) — container + mounts, `/tmp` scratch, `s5cmd` object-storage staging, thread caps, `hpc-mid` + the 24 h time cap, and resumable array jobs. |
 
 ## Install
 
