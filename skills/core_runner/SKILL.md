@@ -50,26 +50,31 @@ object-storage endpoints, and the non-obvious gotchas. Don't reinvent them.
 └── README.md           # exact run steps (+ HANDOFF.md if another chat will drive it)
 ```
 
-### Don't-miss checklist (every item that mattered in a real job)
-Work through each — include it or consciously decide it's N/A:
-- [ ] **Compute script** copied in, arg-driven (reads an input dir, writes one output file/unit).
-- [ ] **Manifest** (`configs/manifest.tsv`) for array jobs — via a `gen_manifest.py`
-      (`templates/gen_manifest.py`); columns match what the sbatch loop parses.
-- [ ] **Inputs staged** — small ones copied in; big ones / weights pulled from source via a
-      `download_inputs.py` (`templates/download_inputs.py`), weights-only, + a tokenizer/assets so
-      nodes run offline.
-- [ ] **`env/job.env`** — bucket set for the cluster; thread caps kept; AWS keys left blank.
-- [ ] **sbatch** — `hpc-mid`; explicit `--time`; container image confirmed (`ls /mnt/data/containers/`);
-      mounts; stage-in to `/tmp`; stage-out; `/tmp` cleanup.
-- [ ] **Runtime path rewrite** — if any config holds absolute paths, rewrite them on the node to the
-      local `/tmp` staged paths (see the block in `templates/array.sbatch`). Easy to forget.
-- [ ] **Resumable skip** (array/long jobs) — unit skips if its output already exists in object storage.
-- [ ] **stage_inputs.sh / fetch_results.sh** — bucket + endpoints set; `.cache` excluded.
-- [ ] **Local validation** — one unit run offline against a temp on-node layout; diffed vs a known
-      result if available.
-- [ ] **Docs** — README (run steps) + HANDOFF.md if another chat will run it.
-- [ ] **Downstream (optional)** — if the job needs a local post-processing/report step after
-      `fetch_results.sh`, add it under `scripts/` (e.g. a `make_report.py`) and note it in the README.
+### Checklist — consider each; use only what the job needs (most jobs skip several)
+This is a menu, **not** a mandatory list. Only a few items are always needed; the rest are
+conditional — decide per job and skip what doesn't apply.
+
+**Always (every job):**
+- **Compute script** copied in, arg-driven (reads inputs, writes outputs).
+- **`env/job.env`** — bucket set for the cluster; thread caps kept; AWS keys left blank.
+- **sbatch** — `hpc-mid`; explicit `--time`; container confirmed (`ls /mnt/data/containers/`);
+  mounts; stage-in to `/tmp`; stage-out; `/tmp` cleanup.
+- **stage_inputs.sh / fetch_results.sh** — bucket + endpoints set.
+- **Local validation** — run one unit against a temp on-node layout before shipping.
+- **README** — the run steps.
+
+**Only if it applies (skip otherwise):**
+- **Array + manifest** (`gen_manifest.py`) — only if there are many independent units; a single job
+  uses `single.sbatch` and no manifest.
+- **Resumable skip** — for array / long / preemptible jobs; a short single job may not need it.
+- **`download_inputs.py`** — only if inputs/weights come from HF/URLs; if inputs are already local,
+  just stage them (no downloader).
+- **Runtime path rewrite** — only if a config holds absolute paths that must point at `/tmp`.
+- **Offline env + tokenizer staging** — only for jobs that would otherwise hit the network (e.g. ML);
+  otherwise drop `HF_HUB_OFFLINE` from `job.env`.
+- **HANDOFF.md** — only if another chat/person will run it.
+- **Downstream post-processing** (e.g. a `make_report.py`) — only if the job needs local analysis
+  after `fetch_results.sh`.
 
 ## Step 2 — fill the templates (`templates/` in this skill dir)
 - **`job.env`**: set `BUCKET` for the target cluster; keep the `/tmp` scratch + cache redirects; keep
