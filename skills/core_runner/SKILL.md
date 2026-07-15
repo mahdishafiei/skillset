@@ -6,9 +6,12 @@ description: >
   ML training/inference, simulations, bioinformatics pipelines, batch processing, anything that runs
   as a command in a container. Handles the cluster conventions: container image + mounts, /tmp
   scratch + cache redirects, s5cmd object-storage staging in/out, CPU thread caps, SLURM partitions
-  + the 24h time cap, and resumability. Use whenever the user wants to prepare / port / "make ready"
-  a job for CoreWeave / the B200 / the RTX cluster / SLURM / sbatch. Claude builds the scripts
-  locally; the user runs them on the cluster (never run Claude or compute on the login node).
+  + the 24h time cap, and resumability. Invoke it and describe the job in plain English — with any
+  links, file/folder paths, .md design docs, a draft script, and a target output folder; it reads
+  those materials, extracts the spec, and generates the compute scripts + sbatch + staging tailored
+  for CoreWeave. Use whenever the user wants to prepare / port / "make ready" a job for CoreWeave /
+  the B200 / the RTX cluster / SLURM / sbatch. Claude builds the scripts locally; the user runs them
+  on the cluster (never run Claude or compute on the login node).
 ---
 
 # core_runner — package a job for the CoreWeave SLURM cluster
@@ -21,7 +24,26 @@ parallel or long jobs) is resumable.
 **Read `references/coreweave.md` first** — cluster/storage/container/partition/time facts, the
 object-storage endpoints, and the non-obvious gotchas. Don't reinvent them.
 
-## Step 0 — establish these (ask only what you can't infer)
+## How you're invoked (intake — do this before writing anything)
+
+The user activates this skill and **describes the job in plain English**. They will usually also
+give you materials and a destination:
+- **links** (papers, GitHub repos, docs) → fetch and read them,
+- **local paths / files / folders** (a draft script, configs, sample data, a design `.md`) → open and
+  read them with the file tools,
+- **a target output folder** (where the bundle should go) and often a **source folder** holding
+  their draft code/inputs.
+
+**Ingest everything they pointed at first** — read every provided file/path and fetch every link, and
+skim any existing code in the source folder (reuse it as the compute script rather than rewriting).
+Build a mental model of: what the job computes, what it reads/writes, and how it splits into units.
+
+Then extract the spec (Step 0), **ask only for the essentials you genuinely can't infer** from what
+they gave you, and build the bundle (Steps 1–4) **into the folder they named** (fall back to
+`<jobname>_coreweave/` only if they didn't specify one). Restate your understanding of the plan
+briefly before generating, so they can correct it.
+
+## Step 0 — the spec to extract (from their description + materials; ask only what's missing)
 
 1. **Compute command** — the exact command that does the work inside the container.
 2. **Job shape:**
