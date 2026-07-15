@@ -40,15 +40,36 @@ object-storage endpoints, and the non-obvious gotchas. Don't reinvent them.
 ## Step 1 — create the package (self-contained)
 ```
 <jobname>_coreweave/
-├── scripts/            # the compute script + any helpers (manifest gen, input download)
+├── scripts/            # the compute script + helpers: gen_manifest.py, download_inputs.py, (report)
 ├── configs/            # config + generated manifest.tsv (array jobs)
-├── data/               # small inputs, or a staging step for big ones
+├── inputs/  (or data/) # small inputs, or produced by download_inputs.py / a staging step
 ├── env/job.env         # from templates/job.env — scratch/caches/thread-caps/keys/bucket
 ├── slurm/run.sbatch    # from templates/{single,array}.sbatch
 ├── stage_inputs.sh     # from templates/stage_inputs.sh   (Scripps -> object storage)
 ├── fetch_results.sh    # from templates/fetch_results.sh  (object storage -> Scripps)
 └── README.md           # exact run steps (+ HANDOFF.md if another chat will drive it)
 ```
+
+### Don't-miss checklist (every item that mattered in a real job)
+Work through each — include it or consciously decide it's N/A:
+- [ ] **Compute script** copied in, arg-driven (reads an input dir, writes one output file/unit).
+- [ ] **Manifest** (`configs/manifest.tsv`) for array jobs — via a `gen_manifest.py`
+      (`templates/gen_manifest.py`); columns match what the sbatch loop parses.
+- [ ] **Inputs staged** — small ones copied in; big ones / weights pulled from source via a
+      `download_inputs.py` (`templates/download_inputs.py`), weights-only, + a tokenizer/assets so
+      nodes run offline.
+- [ ] **`env/job.env`** — bucket set for the cluster; thread caps kept; AWS keys left blank.
+- [ ] **sbatch** — `hpc-mid`; explicit `--time`; container image confirmed (`ls /mnt/data/containers/`);
+      mounts; stage-in to `/tmp`; stage-out; `/tmp` cleanup.
+- [ ] **Runtime path rewrite** — if any config holds absolute paths, rewrite them on the node to the
+      local `/tmp` staged paths (see the block in `templates/array.sbatch`). Easy to forget.
+- [ ] **Resumable skip** (array/long jobs) — unit skips if its output already exists in object storage.
+- [ ] **stage_inputs.sh / fetch_results.sh** — bucket + endpoints set; `.cache` excluded.
+- [ ] **Local validation** — one unit run offline against a temp on-node layout; diffed vs a known
+      result if available.
+- [ ] **Docs** — README (run steps) + HANDOFF.md if another chat will run it.
+- [ ] **Downstream (optional)** — if the job needs a local post-processing/report step after
+      `fetch_results.sh`, add it under `scripts/` (e.g. a `make_report.py`) and note it in the README.
 
 ## Step 2 — fill the templates (`templates/` in this skill dir)
 - **`job.env`**: set `BUCKET` for the target cluster; keep the `/tmp` scratch + cache redirects; keep

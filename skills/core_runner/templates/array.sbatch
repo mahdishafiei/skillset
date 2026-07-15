@@ -34,6 +34,18 @@ s5cmd --endpoint-url "$EP" sync "$S3/inputs/*"          inputs/
 s5cmd --endpoint-url "$EP" cp   "$S3/configs/manifest.tsv" manifest.tsv
 # (stage scripts/config too, or reference them from ${REPO})
 
+# ---- (optional) rewrite absolute paths in a config to the local /tmp staged paths ----
+# If a config file references inputs/weights by absolute path, repoint them at $JOB_WORK_DIR so the
+# job reads the local staged copies. Example (yaml with a 'checkpoint' + 'tokenizer' path):
+# python3 - "$JOB_WORK_DIR" <<'PY'
+# import sys, os, yaml
+# wd = sys.argv[1]; c = yaml.safe_load(open("inputs/config.yaml"))
+# c["tokenizer"] = os.path.join(wd, "inputs", "tokenizer")
+# for k in c["models"]: c["models"][k]["checkpoint"] = os.path.join(wd, "inputs", "checkpoints", k)
+# yaml.safe_dump(c, open("config.runtime.yaml", "w"))
+# PY
+# then pass --config config.runtime.yaml to your command below.
+
 # ---- this task's strided slice of the manifest (skip header) ----
 mapfile -t UNITS < <(tail -n +2 manifest.tsv | awk -v t="$TASK" -v n="$NT" 'NR % n == t')
 echo "task ${TASK}: ${#UNITS[@]} units"
